@@ -1,0 +1,26 @@
+includes:
+    - phpstan-baseline.neon
+    - vendor/cakedc/cakephp-phpstan/extension.neon
+
+parameters:
+    level: 7
+    paths:
+        - stubs
+        - src
+    bootstrapFiles:
+        - tests/bootstrap.php
+    cakeDC:
+        appNamespace: Crustum\Stimulus
+    tmpDir: build/phpstan
+    ignoreErrors: []
+    stubFiles:
+        - stubs/OpenSwoole/Coroutine.php
+        - stubs/OpenSwoole/Coroutine/WaitGroup.php
+        - stubs/OpenSwoole/Coroutine/functions.php
+        - stubs/OpenSwoole/Table.php
+        - stubs/OpenSwoole/Timer.php
+        - stubs/Swoole/Coroutine.php
+        - stubs/Swoole/Coroutine/WaitGroup.php
+        - stubs/Swoole/Coroutine/functions.php
+
+services:

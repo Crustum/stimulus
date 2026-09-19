@@ -1,0 +1,227 @@
+#!/usr/bin/env php
+<?php
+declare(strict_types=1);
+
+/*
+|--------------------------------------------------------------------------
+| Stimulus Swoole / OpenSwoole Server
+|--------------------------------------------------------------------------
+|
+| Boots an HTTP server on the Swoole runtime when present and on the
+| OpenSwoole runtime otherwise, then feeds incoming requests, tasks, and
+| ticks through the Stimulus worker. The StartSwooleCommand spawns this
+| entry with the server state file path as the first argument; live tests
+| spawn it directly with a hand-written state file.
+|
+| Environment contract:
+|
+| - APP_BASE_PATH: host application base path booting the worker app.
+| - STIMULUS_APP_CLASS: application class booting the worker (falls back
+|   through the server state like the worker-start handler).
+| - STIMULUS_CONFIG_DIR: application config directory (defaults to the base
+|   path suffixed with `/config` like the worker-start handler).
+| - COMPOSER_VENDOR_DIR: composer vendor directory (defaults to the base
+|   path suffixed with `/vendor` like the shared bootstrap).
+|
+| Server state contract (JSON file with `masterProcessId`, `managerProcessId`
+| and `state` keys, written by the starter command or by live tests):
+|
+| - state.appName: application name shown in process titles.
+| - state.host / state.port: bind address.
+| - state.appClass: application class fallback for the worker.
+| - state.publicPath: static file root for the Swoole client.
+| - state.defaultServerOptions: `$server->set()` options.
+| - state.maxRequests: kept for parity, enforced by worker rotation.
+| - state.stimulusConfig: Stimulus configuration; `swoole.options` merges
+|   over the default server options, `cache` enables the cache table,
+|   `max_execution_time` enables the timer table and its guard, `tables`
+|   declares named tables, and static file keys travel to the client from
+|   both the top level and the `swoole` section.
+|
+*/
+
+use Crustum\Stimulus\Bridge\Swoole\Handlers\OnManagerStart;
+use Crustum\Stimulus\Bridge\Swoole\Handlers\OnServerStart;
+use Crustum\Stimulus\Bridge\Swoole\Handlers\OnWorkerStart;
+use Crustum\Stimulus\Bridge\Swoole\ServerStateFile;
+use Crustum\Stimulus\Bridge\Swoole\SwooleExtension;
+use Crustum\Stimulus\Bridge\Swoole\WorkerState;
+use Crustum\Stimulus\Cache\Table\TableFactory;
+use Crustum\Stimulus\Http\RequestContext;
+use Crustum\Stimulus\Http\Stream;
+
+ini_set('display_errors', 'stderr');
+
+$basePath = require __DIR__ . '/bootstrap.php';
+
+$serverStateFile = $_SERVER['argv'][1] ?? null;
+
+if (!is_string($serverStateFile) || !is_readable($serverStateFile)) {
+    echo 'Cannot read server state file.';
+
+    exit(11);
+}
+
+$serverState = json_decode((string)file_get_contents($serverStateFile), true)['state'] ?? [];
+
+if (!is_array($serverState)) {
+    echo 'Cannot decode server state file.';
+
+    exit(11);
+}
+
+$serverClass = null;
+
+if (class_exists('Swoole\\Http\\Server')) {
+    $serverClass = 'Swoole\\Http\\Server';
+} elseif (class_exists('OpenSwoole\\Http\\Server')) {
+    $serverClass = 'OpenSwoole\\Http\\Server';
+}
+
+if ($serverClass === null) {
+    Stream::shutdown(new RuntimeException('The stimulus server requires the Swoole or OpenSwoole extension.'));
+
+    exit(1);
+}
+
+$stimulusConfig = $serverState['stimulusConfig'] ?? [];
+$serverOptions = $serverState['defaultServerOptions'] ?? [];
+
+if (isset($stimulusConfig['swoole']['options']) && is_array($stimulusConfig['swoole']['options'])) {
+    $serverOptions = array_merge($serverOptions, $stimulusConfig['swoole']['options']);
+}
+
+try {
+    $server = new $serverClass(
+        $serverState['host'] ?? '127.0.0.1',
+        (int)($serverState['port'] ?? 8000),
+    );
+} catch (Throwable $e) {
+    Stream::shutdown($e);
+
+    exit(1);
+}
+
+$server->set($serverOptions);
+
+$nativeTableClass = class_exists('Swoole\\Table') ? 'Swoole\\Table' : 'OpenSwoole\\Table';
+
+$cacheTable = null;
+
+if (!empty($stimulusConfig['cache'])) {
+    $cacheTable = TableFactory::make((int)($stimulusConfig['cache']['rows'] ?? 1000));
+    $cacheTable->column('value', $nativeTableClass::TYPE_STRING, (int)($stimulusConfig['cache']['bytes'] ?? 10000));
+    $cacheTable->column('expiration', $nativeTableClass::TYPE_INT);
+    $cacheTable->create();
+}
+
+$timerTable = null;
+
+$maxExecutionTime = (int)($stimulusConfig['max_execution_time'] ?? 0);
+
+if ($maxExecutionTime > 0) {
+    $timerTable = TableFactory::make(250);
+    $timerTable->column('worker_pid', $nativeTableClass::TYPE_INT);
+    $timerTable->column('time', $nativeTableClass::TYPE_INT);
+    $timerTable->column('fd', $nativeTableClass::TYPE_INT);
+    $timerTable->create();
+}
+
+$tables = [];
+
+foreach ($stimulusConfig['tables'] ?? [] as $name => $columns) {
+    $table = TableFactory::make((int)(explode(':', (string)$name)[1] ?? 1000));
+
+    foreach (is_array($columns) ? $columns : [] as $columnName => $column) {
+        $parts = explode(':', (string)$column);
+
+        $table->column((string)$columnName, match ($parts[0] ?? 'string') {
+            'int' => $nativeTableClass::TYPE_INT,
+            'float' => $nativeTableClass::TYPE_FLOAT,
+            default => $nativeTableClass::TYPE_STRING,
+        }, (int)($parts[1] ?? 1000));
+    }
+
+    $table->create();
+
+    $tables[explode(':', (string)$name)[0]] = $table;
+}
+
+$workerState = new WorkerState();
+$workerState->cacheTable = $cacheTable;
+$workerState->timerTable = $timerTable;
+$workerState->tables = $tables;
+
+$timerClass = class_exists('Swoole\\Timer') ? 'Swoole\\Timer' : (class_exists('OpenSwoole\\Timer') ? 'OpenSwoole\\Timer' : null);
+
+$server->on('start', function ($server) use ($serverStateFile, $serverState, $timerTable, $maxExecutionTime): void {
+    (new OnServerStart(
+        new ServerStateFile($serverStateFile),
+        new SwooleExtension(),
+        (string)($serverState['appName'] ?? 'Stimulus'),
+        $maxExecutionTime,
+        $timerTable,
+        (bool)($serverState['stimulusConfig']['tick'] ?? true),
+    ))($server);
+});
+
+$server->on('managerstart', function () use ($serverState): void {
+    (new OnManagerStart(
+        new SwooleExtension(),
+        (string)($serverState['appName'] ?? 'Stimulus'),
+    ))();
+});
+
+$server->on('workerstart', function ($server, int $workerId) use ($basePath, $serverState, $workerState): void {
+    (new OnWorkerStart(
+        new SwooleExtension(),
+        $basePath,
+        $serverState,
+        $workerState,
+    ))($server, $workerId);
+});
+
+$server->on('request', function ($request, $response) use ($server, $workerState, $serverState, $stimulusConfig): void {
+    $workerState->lastRequestTime = microtime(true);
+
+    if ($workerState->timerTable) {
+        $workerState->timerTable->set((string)$workerState->workerId, [
+            'worker_pid' => $workerState->workerPid,
+            'time' => time(),
+            'fd' => $request->fd,
+        ]);
+    }
+
+    $workerState->worker->handle(...$workerState->client->marshalRequest(new RequestContext([
+        'swooleRequest' => $request,
+        'swooleResponse' => $response,
+        'publicPath' => $serverState['publicPath'] ?? false,
+        'stimulusConfig' => array_merge($stimulusConfig, $stimulusConfig['swoole'] ?? []),
+    ])));
+
+    if ($workerState->timerTable) {
+        $workerState->timerTable->del((string)$workerState->workerId);
+    }
+});
+
+$server->on('task', function ($server, int $taskId, int $fromWorkerId, $data) use ($workerState) {
+    return $data === 'stimulus-tick'
+        ? $workerState->worker->handleTick()
+        : $workerState->worker->handleTask($data);
+});
+
+$server->on('finish', function ($server, int $taskId, $result) {
+    return $result;
+});
+
+$server->on('workerstop', function () use ($workerState, $timerClass): void {
+    if ($workerState->tickTimerId && $timerClass !== null) {
+        $timerClass::clear($workerState->tickTimerId);
+    }
+
+    if ($workerState->worker) {
+        $workerState->worker->terminate();
+    }
+});
+
+$server->start();

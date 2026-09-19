@@ -1,0 +1,83 @@
+#!/usr/bin/env php
+<?php
+declare(strict_types=1);
+
+use Cake\Log\Log;
+use Crustum\Stimulus\Bridge\RoadRunner\RoadRunnerClient;
+use Crustum\Stimulus\Http\RequestContext;
+use Crustum\Stimulus\Http\Stream;
+use Crustum\Stimulus\Worker\ApplicationFactory;
+use Crustum\Stimulus\Worker\Worker;
+use Laminas\Diactoros\ServerRequestFactory;
+use Laminas\Diactoros\StreamFactory;
+use Laminas\Diactoros\UploadedFileFactory;
+use Psr\Http\Message\ServerRequestInterface;
+use Spiral\Goridge\Exception\RelayException;
+use Spiral\Goridge\Relay;
+use Spiral\RoadRunner\Http\PSR7Worker;
+use Spiral\RoadRunner\Worker as RoadRunnerWorker;
+
+$basePath = require __DIR__ . '/bootstrap.php';
+
+/*
+|--------------------------------------------------------------------------
+| Start The Stimulus Worker
+|--------------------------------------------------------------------------
+|
+| Next we will start the Stimulus worker, which is a long running process to
+| handle incoming requests to the application. Stimulus can intercept the
+| incoming requests and proxy them to the CakePHP application for us.
+|
+*/
+
+$appClass = $_SERVER['STIMULUS_APP_CLASS'] ?? $_ENV['STIMULUS_APP_CLASS'] ?? 'App\\Application';
+$configDir = $_SERVER['STIMULUS_CONFIG_DIR'] ?? $_ENV['STIMULUS_CONFIG_DIR'] ?? $basePath . '/config';
+
+$roadRunnerClient = new RoadRunnerClient($psr7Client = new PSR7Worker(
+    new RoadRunnerWorker(Relay::create($_ENV['STIMULUS_ROADRUNNER_RELAY'] ?? 'pipes')),
+    new ServerRequestFactory(),
+    new StreamFactory(),
+    new UploadedFileFactory(),
+));
+
+$worker = null;
+
+try {
+    while ($psr7Request = $psr7Client->waitRequest()) {
+        if ($worker === null) {
+            $worker = new Worker(
+                new ApplicationFactory($appClass, $configDir),
+                $roadRunnerClient,
+            );
+
+            $worker->boot();
+        }
+
+        if (!$psr7Request instanceof ServerRequestInterface) {
+            break;
+        }
+
+        [$request, $context] = $roadRunnerClient->marshalRequest(new RequestContext([
+            'psr7Request' => $psr7Request,
+        ]));
+
+        $worker->handle($request, $context);
+    }
+} catch (Throwable $e) {
+    if (!$e instanceof RelayException) {
+        if ($worker instanceof Worker) {
+            Log::error($e::class . ': ' . $e->getMessage(), [
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ]);
+        } else {
+            Stream::shutdown($e);
+        }
+    }
+
+    exit(1);
+} finally {
+    if ($worker instanceof Worker) {
+        $worker->terminate();
+    }
+}
