@@ -9,6 +9,8 @@ use OpenSwoole\Coroutine as OpenSwooleCoroutine;
 use OpenSwoole\Coroutine\WaitGroup as OpenSwooleWaitGroup;
 use Swoole\Coroutine;
 use Swoole\Coroutine\WaitGroup;
+use function OpenSwoole\Coroutine\run as openSwooleCoroutineRun;
+use function Swoole\Coroutine\run as swooleCoroutineRun;
 
 /**
  * Swoole coroutine dispatcher.
@@ -93,11 +95,11 @@ class SwooleCoroutineDispatcher implements DispatchesCoroutines
     protected function coroutineRuntime(): ?array
     {
         if (class_exists(Coroutine::class) && function_exists('Swoole\\Coroutine\\run')) {
-            return [Coroutine::class, WaitGroup::class, Coroutine\run(...)];
+            return [Coroutine::class, WaitGroup::class, swooleCoroutineRun(...)];
         }
 
         if (class_exists(OpenSwooleCoroutine::class) && function_exists('OpenSwoole\\Coroutine\\run')) {
-            return [OpenSwooleCoroutine::class, OpenSwooleWaitGroup::class, OpenSwooleCoroutine\run(...)];
+            return [OpenSwooleCoroutine::class, OpenSwooleWaitGroup::class, openSwooleCoroutineRun(...)];
         }
 
         return null;

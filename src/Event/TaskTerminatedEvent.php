@@ -13,6 +13,13 @@ class TaskTerminatedEvent extends StimulusEvent implements OperationTerminated
     use HasApplicationAndSandboxTrait;
 
     /**
+     * Task payload.
+     *
+     * @var mixed
+     */
+    public mixed $payload;
+
+    /**
      * Creates a new task terminated event.
      *
      * @param object $app Base application instance.
@@ -23,9 +30,10 @@ class TaskTerminatedEvent extends StimulusEvent implements OperationTerminated
     public function __construct(
         public object $app,
         public object $sandbox,
-        public mixed $data,
+        mixed $data,
         public mixed $result,
     ) {
+        $this->payload = $data;
         parent::__construct([
             'app' => $app,
             'sandbox' => $sandbox,
@@ -61,7 +69,7 @@ class TaskTerminatedEvent extends StimulusEvent implements OperationTerminated
      */
     public function getPayload(): mixed
     {
-        return $this->data;
+        return $this->payload;
     }
 
     /**

@@ -48,7 +48,7 @@ class StimulusManager
      * @param array<string, mixed> $tables Swoole tables keyed by table name.
      * @return $this
      */
-    public function setTables(array $tables)
+    public function setTables(array $tables): static
     {
         $this->tables = $tables;
 

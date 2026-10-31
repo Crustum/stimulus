@@ -4,14 +4,14 @@ declare(strict_types=1);
 namespace Crustum\Stimulus\Worker;
 
 use Cake\Collection\Collection;
+use Cake\Container\Container as LeagueContainer;
+use Cake\Container\Definition\DefinitionAggregateInterface;
+use Cake\Container\Inflector\InflectorAggregateInterface;
+use Cake\Container\ServiceProvider\ServiceProviderAggregateInterface;
+use Cake\Container\ServiceProvider\ServiceProviderInterface;
 use Cake\Core\Configure;
 use Cake\Http\BaseApplication;
 use Crustum\Stimulus\StimulusManager;
-use League\Container\Container as LeagueContainer;
-use League\Container\Definition\DefinitionAggregateInterface;
-use League\Container\Inflector\InflectorAggregateInterface;
-use League\Container\ServiceProvider\ServiceProviderAggregateInterface;
-use League\Container\ServiceProvider\ServiceProviderInterface;
 use ReflectionClass;
 use Throwable;
 
@@ -163,8 +163,8 @@ class ApplicationFactory
      * resolves through the base application. Inflectors are cloned and
      * re-pointed at the sandbox container.
      *
-     * @param \League\Container\Container $container Base container to clone from.
-     * @return \League\Container\Container Isolated container sharing preloaded definitions.
+     * @param \Cake\Container\Container $container Base container to clone from.
+     * @return \Cake\Container\Container Isolated container sharing preloaded definitions.
      */
     protected function cloneContainer(LeagueContainer $container): LeagueContainer
     {
@@ -199,8 +199,8 @@ class ApplicationFactory
     /**
      * Clones the container event dispatcher so sandbox listeners never reach the base application.
      *
-     * @param \League\Container\Container $baseContainer Base container holding the source dispatcher.
-     * @param \League\Container\Container $sandboxContainer Sandbox container receiving the clone.
+     * @param \Cake\Container\Container $baseContainer Base container holding the source dispatcher.
+     * @param \Cake\Container\Container $sandboxContainer Sandbox container receiving the clone.
      * @return void
      */
     protected function cloneEventDispatcher(LeagueContainer $baseContainer, LeagueContainer $sandboxContainer): void
@@ -221,8 +221,8 @@ class ApplicationFactory
      * their container reference would also mutate the base application. Each
      * provider is cloned first, then pointed at the sandbox container.
      *
-     * @param \League\Container\ServiceProvider\ServiceProviderAggregateInterface $aggregate Sandbox provider aggregate.
-     * @param \League\Container\Container $sandboxContainer Sandbox container receiving registrations.
+     * @param \Cake\Container\ServiceProvider\ServiceProviderAggregateInterface $aggregate Sandbox provider aggregate.
+     * @param \Cake\Container\Container $sandboxContainer Sandbox container receiving registrations.
      * @return void
      */
     protected function cloneProviders(ServiceProviderAggregateInterface $aggregate, LeagueContainer $sandboxContainer): void
@@ -261,9 +261,9 @@ class ApplicationFactory
     /**
      * Clones the inflector aggregate and points it at the sandbox container.
      *
-     * @param \League\Container\Container $baseContainer Base container holding the source aggregate.
-     * @param \League\Container\Container $sandboxContainer Sandbox container receiving the clone.
-     * @param \ReflectionClass<\League\Container\Container> $ref Reflection of the sandbox container.
+     * @param \Cake\Container\Container $baseContainer Base container holding the source aggregate.
+     * @param \Cake\Container\Container $sandboxContainer Sandbox container receiving the clone.
+     * @param \ReflectionClass<\Cake\Container\Container> $ref Reflection of the sandbox container.
      * @return void
      */
     protected function cloneInflectors(LeagueContainer $baseContainer, LeagueContainer $sandboxContainer, ReflectionClass $ref): void
@@ -301,9 +301,9 @@ class ApplicationFactory
      * routes sandbox autowiring through the base application and lets cached
      * instances leak across requests.
      *
-     * @param \League\Container\Container $baseContainer Base container holding the source delegates.
-     * @param \League\Container\Container $sandboxContainer Sandbox container receiving the clones.
-     * @param \ReflectionClass<\League\Container\Container> $ref Reflection of the sandbox container.
+     * @param \Cake\Container\Container $baseContainer Base container holding the source delegates.
+     * @param \Cake\Container\Container $sandboxContainer Sandbox container receiving the clones.
+     * @param \ReflectionClass<\Cake\Container\Container> $ref Reflection of the sandbox container.
      * @return void
      */
     protected function cloneDelegates(LeagueContainer $baseContainer, LeagueContainer $sandboxContainer, ReflectionClass $ref): void
@@ -442,7 +442,7 @@ class ApplicationFactory
      * without subclassing the host application.
      *
      * @param \Cake\Http\BaseApplication $app Application receiving the container.
-     * @param \League\Container\Container $container Container to inject.
+     * @param \Cake\Container\Container $container Container to inject.
      * @return void
      */
     protected function injectContainer(BaseApplication $app, LeagueContainer $container): void

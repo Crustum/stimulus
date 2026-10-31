@@ -4,8 +4,6 @@ declare(strict_types=1);
 namespace Crustum\Stimulus\Command;
 
 use Cake\Collection\Collection;
-use Cake\Console\Arguments;
-use Cake\Console\ConsoleIo;
 use Cake\Console\ConsoleOptionParser;
 use Crustum\PluginManifest\Command\ManifestInstallCommand;
 use Crustum\Stimulus\Bridge\Swoole\SwooleExtension;
@@ -80,37 +78,32 @@ class InstallCommand extends StimulusCommand
      * env file, and publishes the plugin configuration. The side-effect chain
      * runs as plain statements.
      *
-     * @param \Cake\Console\Arguments $args The command arguments.
-     * @param \Cake\Console\ConsoleIo $io The console io.
      * @return int|null The exit code or null for success.
      */
-    public function execute(Arguments $args, ConsoleIo $io): ?int
+    public function execute(): ?int
     {
-        $server = $args->getOption('server');
-
+        $server = $this->args->getOption('server');
         if (!is_string($server) || $server === '') {
-            $server = $io->askChoice(
+            $server = $this->io->askChoice(
                 'Which application server you would like to use?',
                 ['frankenphp', 'roadrunner', 'swoole'],
                 'frankenphp',
             );
         }
-
         $installed = match ($server) {
             'swoole' => $this->installSwooleServer(),
             'roadrunner' => $this->installRoadRunnerServer(),
             'frankenphp' => $this->installFrankenPhpServer(),
             default => $this->invalidServer($server),
         };
-
         if ($installed) {
             $this->updateEnvironmentFile($server);
 
-            $this->publishConfiguration((bool)$args->getOption('force'), $io);
+            $this->publishConfiguration((bool)$this->args->getOption('force'));
 
-            $io->success('Stimulus installed successfully.');
+            $this->io->success('Stimulus installed successfully.');
 
-            $io->out('');
+            $this->io->out('');
         }
 
         return $installed ? self::CODE_SUCCESS : self::CODE_ERROR;
@@ -158,10 +151,9 @@ class InstallCommand extends StimulusCommand
      * plugin assets.
      *
      * @param bool $force Whether existing configuration files are overwritten.
-     * @param \Cake\Console\ConsoleIo $io The console io.
      * @return int|null Exit code of the manifest installation.
      */
-    protected function publishConfiguration(bool $force, ConsoleIo $io): ?int
+    protected function publishConfiguration(bool $force): ?int
     {
         $args = [
             '--plugin',
@@ -175,7 +167,7 @@ class InstallCommand extends StimulusCommand
             $args[] = '--force';
         }
 
-        return $this->executeCommand(ManifestInstallCommand::class, $args, $io);
+        return $this->executeCommand(ManifestInstallCommand::class, $args);
     }
 
     /**

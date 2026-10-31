@@ -9,6 +9,13 @@ namespace Crustum\Stimulus\Event;
 class TaskReceivedEvent extends StimulusEvent
 {
     /**
+     * Task payload.
+     *
+     * @var mixed
+     */
+    public mixed $payload;
+
+    /**
      * Creates a new task received event.
      *
      * @param object $app Base application instance.
@@ -18,8 +25,9 @@ class TaskReceivedEvent extends StimulusEvent
     public function __construct(
         public object $app,
         public object $sandbox,
-        public mixed $data,
+        mixed $data,
     ) {
+        $this->payload = $data;
         parent::__construct([
             'app' => $app,
             'sandbox' => $sandbox,
@@ -54,6 +62,6 @@ class TaskReceivedEvent extends StimulusEvent
      */
     public function getPayload(): mixed
     {
-        return $this->data;
+        return $this->payload;
     }
 }

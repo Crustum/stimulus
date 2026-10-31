@@ -3,7 +3,6 @@ declare(strict_types=1);
 
 namespace Crustum\Stimulus\Test\Unit\Command;
 
-use Cake\Console\Arguments;
 use Cake\Console\ConsoleIo;
 use Cake\Console\TestSuite\StubConsoleOutput;
 use Cake\Core\Configure;
@@ -203,7 +202,7 @@ class FrankenPhpBinaryRequirementsTest extends TestCase
              * @param \Cake\Console\ConsoleIo $io The console io.
              * @return int The exit code.
              */
-            public function execute(Arguments $args, ConsoleIo $io): int
+            public function execute(): int
             {
                 return self::CODE_SUCCESS;
             }

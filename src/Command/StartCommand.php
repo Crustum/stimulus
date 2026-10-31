@@ -4,9 +4,7 @@ declare(strict_types=1);
 namespace Crustum\Stimulus\Command;
 
 use Cake\Collection\Collection;
-use Cake\Console\Arguments;
 use Cake\Console\CommandFactoryInterface;
-use Cake\Console\ConsoleIo;
 use Cake\Console\ConsoleOptionParser;
 use Override;
 use SignalHandler\Command\Trait\SignalHandlerTrait;
@@ -111,24 +109,22 @@ class StartCommand extends StimulusCommand
      * Forwards the parsed options to the starter of the selected server per
      * driver.
      *
-     * @param \Cake\Console\Arguments $args The command arguments.
-     * @param \Cake\Console\ConsoleIo $io The console io.
      * @return int|null The exit code or null for success.
      */
-    public function execute(Arguments $args, ConsoleIo $io): ?int
+    public function execute(): ?int
     {
-        $this->bindGracefulTermination(function (int $signal) use ($io): void {
-            $io->warning('Stimulus start received termination signal, shutting down gracefully...');
+        $this->bindGracefulTermination(function (int $signal): void {
+            $this->io->warning('Stimulus start received termination signal, shutting down gracefully...');
 
             $this->isRunning = false;
         });
 
-        $server = $args->getOption('server') ?: $this->stimulusConfig('server', 'roadrunner');
+        $server = $this->args->getOption('server') ?: $this->stimulusConfig('server', 'roadrunner');
 
         return match ($server) {
-            'swoole' => $this->startSwooleServer($io),
-            'roadrunner' => $this->startRoadRunnerServer($io),
-            'frankenphp' => $this->startFrankenPhpServer($io),
+            'swoole' => $this->startSwooleServer(),
+            'roadrunner' => $this->startRoadRunnerServer(),
+            'frankenphp' => $this->startFrankenPhpServer(),
             default => $this->invalidServer((string)$server),
         };
     }
@@ -136,10 +132,9 @@ class StartCommand extends StimulusCommand
     /**
      * Starts the Swoole server for Stimulus.
      *
-     * @param \Cake\Console\ConsoleIo $io The console io.
      * @return int|null The exit code or null for success of the starter.
      */
-    protected function startSwooleServer(ConsoleIo $io): ?int
+    protected function startSwooleServer(): ?int
     {
         return $this->executeCommand(
             $this->swooleStarter(),
@@ -152,17 +147,15 @@ class StartCommand extends StimulusCommand
                 'watch' => $this->serverOption('watch'),
                 'poll' => $this->serverOption('poll'),
             ]),
-            $io,
         );
     }
 
     /**
      * Starts the RoadRunner server for Stimulus.
      *
-     * @param \Cake\Console\ConsoleIo $io The console io.
      * @return int|null The exit code or null for success of the starter.
      */
-    protected function startRoadRunnerServer(ConsoleIo $io): ?int
+    protected function startRoadRunnerServer(): ?int
     {
         return $this->executeCommand(
             $this->roadRunnerStarter(),
@@ -178,17 +171,15 @@ class StartCommand extends StimulusCommand
                 'poll' => $this->serverOption('poll'),
                 'log-level' => $this->serverOption('log-level'),
             ]),
-            $io,
         );
     }
 
     /**
      * Starts the FrankenPHP server for Stimulus.
      *
-     * @param \Cake\Console\ConsoleIo $io The console io.
      * @return int|null The exit code or null for success of the starter.
      */
-    protected function startFrankenPhpServer(ConsoleIo $io): ?int
+    protected function startFrankenPhpServer(): ?int
     {
         return $this->executeCommand(
             $this->frankenPhpStarter(),
@@ -205,7 +196,6 @@ class StartCommand extends StimulusCommand
                 'poll' => $this->serverOption('poll'),
                 'log-level' => $this->serverOption('log-level'),
             ]),
-            $io,
         );
     }
 

@@ -161,7 +161,7 @@ class InstallCommandTest extends TestCase
              * @param \Cake\Console\ConsoleIo $io The console io.
              * @return int The exit code or null for success.
              */
-            protected function publishConfiguration(bool $force, ConsoleIo $io): int
+            protected function publishConfiguration(bool $force): int
             {
                 return self::CODE_SUCCESS;
             }

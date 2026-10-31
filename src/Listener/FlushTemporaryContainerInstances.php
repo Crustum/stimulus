@@ -3,12 +3,12 @@ declare(strict_types=1);
 
 namespace Crustum\Stimulus\Listener;
 
+use Cake\Container\Container as LeagueContainer;
+use Cake\Container\Definition\DefinitionAggregateInterface;
 use Cake\Core\Configure;
 use Cake\Event\EventListenerInterface;
 use Cake\Http\BaseApplication;
 use Crustum\Stimulus\Contracts\OperationTerminated;
-use League\Container\Container as LeagueContainer;
-use League\Container\Definition\DefinitionAggregateInterface;
 use ReflectionClass;
 use Throwable;
 
@@ -83,8 +83,8 @@ class FlushTemporaryContainerInstances implements EventListenerInterface
     /**
      * Reads the definition aggregate from the given container.
      *
-     * @param \League\Container\Container $container Container holding the aggregate.
-     * @return \League\Container\Definition\DefinitionAggregateInterface|null Definition aggregate, or null when unreachable.
+     * @param \Cake\Container\Container $container Container holding the aggregate.
+     * @return \Cake\Container\Definition\DefinitionAggregateInterface|null Definition aggregate, or null when unreachable.
      */
     protected function definitionAggregate(LeagueContainer $container): ?DefinitionAggregateInterface
     {
@@ -103,7 +103,7 @@ class FlushTemporaryContainerInstances implements EventListenerInterface
      * Unknown bindings and definitions without resolvable state pass through
      * untouched, so flush lists stay safe against renames.
      *
-     * @param \League\Container\Definition\DefinitionAggregateInterface $aggregate Definition aggregate holding the binding.
+     * @param \Cake\Container\Definition\DefinitionAggregateInterface $aggregate Definition aggregate holding the binding.
      * @param string $binding Binding identifier to forget.
      * @return void
      */

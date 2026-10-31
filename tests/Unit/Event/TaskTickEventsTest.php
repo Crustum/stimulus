@@ -36,7 +36,7 @@ class TaskTickEventsTest extends TestCase
         $this->assertSame('Stimulus.taskReceived', TaskReceivedEvent::eventName());
         $this->assertSame($app, $event->app);
         $this->assertSame($sandbox, $event->sandbox);
-        $this->assertSame('payload', $event->data);
+        $this->assertSame('payload', $event->payload);
         $this->assertSame($app, $event->getApp());
         $this->assertSame($sandbox, $event->getSandbox());
         $this->assertSame('payload', $event->getPayload());
@@ -63,7 +63,7 @@ class TaskTickEventsTest extends TestCase
         $this->assertSame('Stimulus.taskTerminated', TaskTerminatedEvent::eventName());
         $this->assertSame($app, $event->app());
         $this->assertSame($sandbox, $event->sandbox());
-        $this->assertSame('payload', $event->data);
+        $this->assertSame('payload', $event->payload);
         $this->assertSame('result', $event->result);
         $this->assertSame($app, $event->getApp());
         $this->assertSame($sandbox, $event->getSandbox());

@@ -28,7 +28,7 @@ class FlushStrCacheTest extends TestCase
     {
         $this->assertSame('oxen', Inflector::pluralize('ox'));
 
-        $property = new ReflectionProperty(Inflector::class, '_cache');
+        $property = new ReflectionProperty(Inflector::class, 'cache');
         $this->assertNotEmpty($property->getValue());
 
         $event = new RequestReceivedEvent(new stdClass(), new stdClass(), new ServerRequest(['url' => '/']));

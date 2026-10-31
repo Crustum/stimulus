@@ -3,9 +3,9 @@ declare(strict_types=1);
 
 namespace Crustum\Stimulus\Test\Unit\Command;
 
-use Cake\Console\Arguments;
 use Cake\Console\CommandInterface;
 use Cake\Console\ConsoleIo;
+use Cake\Console\ConsoleIoInterface;
 use Cake\Console\TestSuite\StubConsoleOutput;
 use Cake\Core\Configure;
 use Crustum\Broadcasting\Broadcaster\MercureBroadcaster;
@@ -846,7 +846,7 @@ class StartCommandsTest extends TestCase
              * @param \Cake\Console\ConsoleIo $io The console io.
              * @return int The exit code or null for success.
              */
-            public function execute(Arguments $args, ConsoleIo $io): int
+            public function execute(): int
             {
                 return self::CODE_SUCCESS;
             }
@@ -1094,10 +1094,9 @@ class StartCommandsTest extends TestCase
              * @param \Cake\Console\ConsoleIo $io The console io.
              * @return int The exit code.
              */
-            public function execute(Arguments $args, ConsoleIo $io): int
+            public function execute(): int
             {
-                $port = $args->getOption('port');
-
+                $port = $this->args->getOption('port');
                 $this->forwardedPort = is_string($port) ? $port : null;
 
                 return self::CODE_SUCCESS;
@@ -1160,7 +1159,7 @@ class StartCommandsTest extends TestCase
              * @param \Cake\Console\ConsoleIo $io The console io.
              * @return int The exit code.
              */
-            public function execute(Arguments $args, ConsoleIo $io): int
+            public function execute(): int
             {
                 return self::CODE_SUCCESS;
             }
@@ -1179,15 +1178,15 @@ class StartCommandsTest extends TestCase
              * Records the silenced stop command instead of running it.
              *
              * @param \Cake\Console\CommandInterface|string $command Command to execute.
-             * @param array<int|string, mixed> $args Arguments forwarded to the command.
-             * @param \Cake\Console\ConsoleIo|null $io Console io.
-             * @return int Exit code of the executed command.
+             * @param array $args Arguments forwarded to the command.
+             * @param \Cake\Console\ConsoleIoInterface|null $io Console io.
+             * @return int|null Exit code of the executed command.
              */
             public function executeCommand(
                 CommandInterface|string $command,
                 array $args = [],
-                ?ConsoleIo $io = null,
-            ): int {
+                ?ConsoleIoInterface $io = null,
+            ): ?int {
                 $this->stoppedArgs = array_values($args);
 
                 return self::CODE_SUCCESS;
@@ -1224,7 +1223,7 @@ class StartCommandsTest extends TestCase
              * @param \Cake\Console\ConsoleIo $io The console io.
              * @return int The exit code or null for success.
              */
-            public function execute(Arguments $args, ConsoleIo $io): int
+            public function execute(): int
             {
                 return self::CODE_SUCCESS;
             }
@@ -1316,7 +1315,7 @@ class StartCommandsTest extends TestCase
              * @param \Cake\Console\ConsoleIo $io The console io.
              * @return int The exit code or null for success.
              */
-            public function execute(Arguments $args, ConsoleIo $io): int
+            public function execute(): int
             {
                 return self::CODE_SUCCESS;
             }
@@ -1391,7 +1390,7 @@ class StartCommandsTest extends TestCase
              * @param \Cake\Console\ConsoleIo $io The console io.
              * @return int The exit code or null for success.
              */
-            public function execute(Arguments $args, ConsoleIo $io): int
+            public function execute(): int
             {
                 return self::CODE_SUCCESS;
             }

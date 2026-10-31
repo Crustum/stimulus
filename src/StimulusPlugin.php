@@ -5,9 +5,9 @@ namespace Crustum\Stimulus;
 
 use Cake\Collection\Collection;
 use Cake\Console\CommandCollection;
+use Cake\Container\ContainerInterface;
 use Cake\Core\BasePlugin;
 use Cake\Core\Configure;
-use Cake\Core\ContainerInterface;
 use Cake\Core\PluginApplicationInterface;
 use Cake\Event\EventListenerInterface;
 use Cake\Event\EventManagerInterface;
@@ -122,11 +122,7 @@ class StimulusPlugin extends BasePlugin
         $container->addShared(
             StimulusManager::class,
             function () use ($container): StimulusManager {
-                $dispatcher = $container->get(DispatchesTasks::class);
-
-                assert($dispatcher instanceof DispatchesTasks);
-
-                return new StimulusManager($dispatcher);
+                return new StimulusManager($container->get(DispatchesTasks::class));
             },
         );
 

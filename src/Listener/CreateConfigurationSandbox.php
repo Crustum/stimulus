@@ -137,11 +137,9 @@ class CreateConfigurationSandbox implements EventListenerInterface
 
         $current = Configure::read();
 
-        if (is_array($current)) {
-            (new Collection(array_keys($current)))->each(function ($key): void {
-                Configure::delete((string)$key);
-            });
-        }
+        (new Collection(array_keys($current)))->each(function ($key): void {
+            Configure::delete((string)$key);
+        });
 
         Configure::write($snapshot);
     }

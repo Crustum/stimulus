@@ -67,7 +67,7 @@ class CreateUrlGeneratorSandbox implements EventListenerInterface
      */
     protected function refreshRequestContext(): void
     {
-        $property = new ReflectionProperty(Router::class, '_requestContext');
+        $property = new ReflectionProperty(Router::class, 'requestContext');
         $context = $property->getValue();
 
         if (!is_array($context)) {

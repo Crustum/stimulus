@@ -6,7 +6,7 @@ namespace Crustum\Stimulus\Bridge\Swoole;
 use Cake\Collection\Collection;
 use Cake\Core\Configure;
 use Cake\Http\Cookie\CookieInterface;
-use Cake\Http\Cookie\SameSiteEnum;
+use Cake\Http\Cookie\Enum\SameSite;
 use Cake\Http\Response;
 use Cake\Http\ServerRequest;
 use Closure;
@@ -568,7 +568,7 @@ class SwooleClient implements Client, ServesStaticFiles
             $cookie->getDomain(),
             $cookie->isSecure(),
             $cookie->isHttpOnly(),
-            $sameSite instanceof SameSiteEnum ? $sameSite->value : '',
+            $sameSite instanceof SameSite ? $sameSite->value : '',
         ];
 
         if (extension_loaded('swoole') && $this->swooleVersionId() >= 60000) {

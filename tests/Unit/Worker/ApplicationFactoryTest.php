@@ -138,7 +138,7 @@ class ApplicationFactoryTest extends TestCase
 
         $second = $this->appFactory()->createSandbox($app);
 
-        $this->assertFalse($second->getContainer()->has(ServerRequest::class));
+        $this->assertFalse($second->getContainer()->hasDefinition(ServerRequest::class));
     }
 
     /**

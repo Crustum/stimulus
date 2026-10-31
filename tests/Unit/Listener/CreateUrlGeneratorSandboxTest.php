@@ -23,8 +23,8 @@ class CreateUrlGeneratorSandboxTest extends TestCase
      */
     public function testUrlGenerationFollowsFreshRequest(): void
     {
-        $requestProperty = new ReflectionProperty(Router::class, '_request');
-        $contextProperty = new ReflectionProperty(Router::class, '_requestContext');
+        $requestProperty = new ReflectionProperty(Router::class, 'request');
+        $contextProperty = new ReflectionProperty(Router::class, 'requestContext');
         $originalRequest = $requestProperty->getValue();
         $originalContext = $contextProperty->getValue();
 

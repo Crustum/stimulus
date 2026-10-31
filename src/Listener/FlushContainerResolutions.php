@@ -3,12 +3,12 @@ declare(strict_types=1);
 
 namespace Crustum\Stimulus\Listener;
 
+use Cake\Container\Container;
+use Cake\Container\Definition\DefinitionAggregate;
 use Cake\Controller\ComponentRegistry;
 use Cake\Event\EventListenerInterface;
 use Cake\Http\BaseApplication;
 use Crustum\Stimulus\Event\RequestReceivedEvent;
-use League\Container\Container;
-use League\Container\Definition\DefinitionAggregate;
 use ReflectionClass;
 
 /**
@@ -77,7 +77,7 @@ class FlushContainerResolutions implements EventListenerInterface
      * the aggregate's public `remove()` method. The `ControllerFactory` will
      * re-add the definition on the next `create()` call, yielding a fresh instance.
      *
-     * @param \League\Container\Container $container League Container holding shared resolutions.
+     * @param \Cake\Container\Container $container League Container holding shared resolutions.
      * @return void
      */
     protected function flushStaleDefinitions(Container $container): void

@@ -3,9 +3,7 @@ declare(strict_types=1);
 
 namespace Crustum\Stimulus\Command;
 
-use Cake\Console\Arguments;
 use Cake\Console\CommandFactoryInterface;
-use Cake\Console\ConsoleIo;
 use Cake\Console\ConsoleOptionParser;
 use Crustum\Stimulus\Bridge\FrankenPhp\ServerStateFile as FrankenPhpServerStateFile;
 use Crustum\Stimulus\Bridge\RoadRunner\ServerStateFile as RoadRunnerServerStateFile;
@@ -84,13 +82,11 @@ class StopCommand extends StimulusCommand
     /**
      * Executes the command.
      *
-     * @param \Cake\Console\Arguments $args The command arguments.
-     * @param \Cake\Console\ConsoleIo $io The console io.
      * @return int|null The exit code or null for success.
      */
-    public function execute(Arguments $args, ConsoleIo $io): ?int
+    public function execute(): ?int
     {
-        $server = $args->getOption('server') ?: $this->stimulusConfig('server', 'roadrunner');
+        $server = $this->args->getOption('server') ?: $this->stimulusConfig('server', 'roadrunner');
 
         return match ($server) {
             'swoole' => $this->stopSwooleServer(),

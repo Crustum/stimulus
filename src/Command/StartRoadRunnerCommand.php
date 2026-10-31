@@ -4,9 +4,7 @@ declare(strict_types=1);
 namespace Crustum\Stimulus\Command;
 
 use Cake\Collection\Collection;
-use Cake\Console\Arguments;
 use Cake\Console\CommandFactoryInterface;
-use Cake\Console\ConsoleIo;
 use Cake\Console\ConsoleOptionParser;
 use Cake\Core\Configure;
 use Crustum\Stimulus\Bridge\RoadRunner\ServerStateFile as RoadRunnerServerStateFile;
@@ -112,14 +110,12 @@ class StartRoadRunnerCommand extends StimulusCommand
      * `rr serve` with the mapped server options and pumps its output through
      * the server loop.
      *
-     * @param \Cake\Console\Arguments $args The command arguments.
-     * @param \Cake\Console\ConsoleIo $io The console io.
      * @return int|null The exit code or null for success.
      */
-    public function execute(Arguments $args, ConsoleIo $io): ?int
+    public function execute(): ?int
     {
-        $this->bindGracefulTermination(function (int $signal) use ($io): void {
-            $io->warning('Stimulus RoadRunner received termination signal, shutting down gracefully...');
+        $this->bindGracefulTermination(function (int $signal): void {
+            $this->io->warning('Stimulus RoadRunner received termination signal, shutting down gracefully...');
 
             $this->isRunning = false;
         });

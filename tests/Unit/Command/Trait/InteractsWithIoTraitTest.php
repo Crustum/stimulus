@@ -3,7 +3,6 @@ declare(strict_types=1);
 
 namespace Crustum\Stimulus\Test\Unit\Command\Trait;
 
-use Cake\Console\Arguments;
 use Cake\Console\ConsoleIo;
 use Cake\Console\TestSuite\StubConsoleOutput;
 use Crustum\Stimulus\Command\StimulusCommand;
@@ -178,7 +177,7 @@ class InteractsWithIoTraitTest extends TestCase
              * @param \Cake\Console\ConsoleIo $io The console io.
              * @return int The exit code or null for success.
              */
-            public function execute(Arguments $args, ConsoleIo $io): int
+            public function execute(): int
             {
                 return self::CODE_SUCCESS;
             }
