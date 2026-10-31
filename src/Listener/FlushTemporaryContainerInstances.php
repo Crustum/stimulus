@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 namespace Crustum\Stimulus\Listener;
 
-use Cake\Container\Container as LeagueContainer;
+use Cake\Container\Container;
 use Cake\Container\Definition\DefinitionAggregateInterface;
 use Cake\Core\Configure;
 use Cake\Event\EventListenerInterface;
@@ -51,7 +51,7 @@ class FlushTemporaryContainerInstances implements EventListenerInterface
 
         $container = $app->getContainer();
 
-        if (!$container instanceof LeagueContainer) {
+        if (!$container instanceof Container) {
             return;
         }
 
@@ -86,7 +86,7 @@ class FlushTemporaryContainerInstances implements EventListenerInterface
      * @param \Cake\Container\Container $container Container holding the aggregate.
      * @return \Cake\Container\Definition\DefinitionAggregateInterface|null Definition aggregate, or null when unreachable.
      */
-    protected function definitionAggregate(LeagueContainer $container): ?DefinitionAggregateInterface
+    protected function definitionAggregate(Container $container): ?DefinitionAggregateInterface
     {
         try {
             $aggregate = (new ReflectionClass($container))->getProperty('definitions')->getValue($container);

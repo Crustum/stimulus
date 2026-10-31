@@ -4,7 +4,7 @@ declare(strict_types=1);
 namespace Crustum\Stimulus\Listener;
 
 use Cake\Container\Container;
-use Cake\Container\Definition\DefinitionAggregate;
+use Cake\Container\Definition\DefinitionAggregateInterface;
 use Cake\Controller\ComponentRegistry;
 use Cake\Event\EventListenerInterface;
 use Cake\Http\BaseApplication;
@@ -14,7 +14,7 @@ use ReflectionClass;
 /**
  * Flushes the application container's cached resolutions between worker operations.
  *
- * League Container caches shared instance resolutions in
+ * The container caches shared instance resolutions in
  * `Definition::$resolved`. The `ControllerFactory` registers `ComponentRegistry`
  * as a shared binding via `addShared()`, but when the alias already exists the
  * second call returns the OLD definition — its cached `$resolved` instance
@@ -73,24 +73,30 @@ class FlushContainerResolutions implements EventListenerInterface
     /**
      * Removes the `ComponentRegistry` definition from the container's aggregate.
      *
-     * Uses reflection to access the private `definitions` property, then calls
-     * the aggregate's public `remove()` method. The `ControllerFactory` will
+     * Reads the aggregate's internal definition map through reflection and
+     * drops the stale key. The definition aggregate exposes no public
+     * `remove()`, so the key is unset directly. The `ControllerFactory` will
      * re-add the definition on the next `create()` call, yielding a fresh instance.
      *
-     * @param \Cake\Container\Container $container League Container holding shared resolutions.
+     * @param \Cake\Container\Container $container Container holding shared resolutions.
      * @return void
      */
     protected function flushStaleDefinitions(Container $container): void
     {
-        $containerRef = new ReflectionClass($container);
+        $aggregate = (new ReflectionClass($container))->getProperty('definitions')->getValue($container);
 
-        $definitionsProp = $containerRef->getProperty('definitions');
-        $aggregate = $definitionsProp->getValue($container);
-
-        if (!$aggregate instanceof DefinitionAggregate) {
+        if (!$aggregate instanceof DefinitionAggregateInterface) {
             return;
         }
 
-        $aggregate->remove(ComponentRegistry::class);
+        $aggregateRef = new ReflectionClass($aggregate);
+        $definitions = $aggregateRef->getProperty('definitions')->getValue($aggregate);
+
+        if (!is_array($definitions) || !array_key_exists(ComponentRegistry::class, $definitions)) {
+            return;
+        }
+
+        unset($definitions[ComponentRegistry::class]);
+        $aggregateRef->getProperty('definitions')->setValue($aggregate, $definitions);
     }
 }

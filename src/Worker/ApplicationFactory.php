@@ -4,7 +4,7 @@ declare(strict_types=1);
 namespace Crustum\Stimulus\Worker;
 
 use Cake\Collection\Collection;
-use Cake\Container\Container as LeagueContainer;
+use Cake\Container\Container;
 use Cake\Container\Definition\DefinitionAggregateInterface;
 use Cake\Container\Inflector\InflectorAggregateInterface;
 use Cake\Container\ServiceProvider\ServiceProviderAggregateInterface;
@@ -139,7 +139,7 @@ class ApplicationFactory
 
         $container = $app->getContainer();
 
-        if ($container instanceof LeagueContainer) {
+        if ($container instanceof Container) {
             $this->injectContainer($sandbox, $this->cloneContainer($container));
 
             return $sandbox;
@@ -166,7 +166,7 @@ class ApplicationFactory
      * @param \Cake\Container\Container $container Base container to clone from.
      * @return \Cake\Container\Container Isolated container sharing preloaded definitions.
      */
-    protected function cloneContainer(LeagueContainer $container): LeagueContainer
+    protected function cloneContainer(Container $container): Container
     {
         $sandboxContainer = clone $container;
 
@@ -203,7 +203,7 @@ class ApplicationFactory
      * @param \Cake\Container\Container $sandboxContainer Sandbox container receiving the clone.
      * @return void
      */
-    protected function cloneEventDispatcher(LeagueContainer $baseContainer, LeagueContainer $sandboxContainer): void
+    protected function cloneEventDispatcher(Container $baseContainer, Container $sandboxContainer): void
     {
         $dispatcher = $this->readProperty($baseContainer, 'eventDispatcher');
 
@@ -225,7 +225,7 @@ class ApplicationFactory
      * @param \Cake\Container\Container $sandboxContainer Sandbox container receiving registrations.
      * @return void
      */
-    protected function cloneProviders(ServiceProviderAggregateInterface $aggregate, LeagueContainer $sandboxContainer): void
+    protected function cloneProviders(ServiceProviderAggregateInterface $aggregate, Container $sandboxContainer): void
     {
         $providers = $this->readProperty($aggregate, 'providers');
 
@@ -266,7 +266,7 @@ class ApplicationFactory
      * @param \ReflectionClass<\Cake\Container\Container> $ref Reflection of the sandbox container.
      * @return void
      */
-    protected function cloneInflectors(LeagueContainer $baseContainer, LeagueContainer $sandboxContainer, ReflectionClass $ref): void
+    protected function cloneInflectors(Container $baseContainer, Container $sandboxContainer, ReflectionClass $ref): void
     {
         try {
             $inflectors = $ref->getProperty('inflectors')->getValue($baseContainer);
@@ -306,7 +306,7 @@ class ApplicationFactory
      * @param \ReflectionClass<\Cake\Container\Container> $ref Reflection of the sandbox container.
      * @return void
      */
-    protected function cloneDelegates(LeagueContainer $baseContainer, LeagueContainer $sandboxContainer, ReflectionClass $ref): void
+    protected function cloneDelegates(Container $baseContainer, Container $sandboxContainer, ReflectionClass $ref): void
     {
         try {
             $delegates = $ref->getProperty('delegates')->getValue($baseContainer);
@@ -418,7 +418,7 @@ class ApplicationFactory
     /**
      * Replaces the sandbox container with a newly built one.
      *
-     * Fallback for containers without League registration aggregates: the
+     * Fallback for containers without registration aggregates: the
      * container slot is emptied so the next access rebuilds it through the
      * application build path.
      *
@@ -445,7 +445,7 @@ class ApplicationFactory
      * @param \Cake\Container\Container $container Container to inject.
      * @return void
      */
-    protected function injectContainer(BaseApplication $app, LeagueContainer $container): void
+    protected function injectContainer(BaseApplication $app, Container $container): void
     {
         $ref = new ReflectionClass($app);
         $prop = $ref->getProperty('container');

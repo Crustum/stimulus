@@ -90,6 +90,7 @@ class InstallCommand extends StimulusCommand
                 'frankenphp',
             );
         }
+
         $installed = match ($server) {
             'swoole' => $this->installSwooleServer(),
             'roadrunner' => $this->installRoadRunnerServer(),

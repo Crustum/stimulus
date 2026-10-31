@@ -40,6 +40,8 @@ class FlushContainerResolutionsTest extends TestCase
 
         (new FlushContainerResolutions())->handleRequestReceived($event);
 
+        $this->assertFalse($app->getContainer()->hasDefinition(ComponentRegistry::class));
+
         $fresh = new stdClass();
         $app->getContainer()->addShared(ComponentRegistry::class, $fresh);
 

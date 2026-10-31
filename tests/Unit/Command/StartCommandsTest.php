@@ -1180,13 +1180,13 @@ class StartCommandsTest extends TestCase
              * @param \Cake\Console\CommandInterface|string $command Command to execute.
              * @param array $args Arguments forwarded to the command.
              * @param \Cake\Console\ConsoleIoInterface|null $io Console io.
-             * @return int|null Exit code of the executed command.
+             * @return int Exit code of the executed command.
              */
             public function executeCommand(
                 CommandInterface|string $command,
                 array $args = [],
                 ?ConsoleIoInterface $io = null,
-            ): ?int {
+            ): int {
                 $this->stoppedArgs = array_values($args);
 
                 return self::CODE_SUCCESS;

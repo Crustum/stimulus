@@ -121,9 +121,7 @@ class StimulusPlugin extends BasePlugin
 
         $container->addShared(
             StimulusManager::class,
-            function () use ($container): StimulusManager {
-                return new StimulusManager($container->get(DispatchesTasks::class));
-            },
+            fn(): StimulusManager => new StimulusManager($container->get(DispatchesTasks::class)),
         );
 
         $container->add(
