@@ -10,7 +10,7 @@ The plugin integrates seamlessly with CakePHP's application lifecycle and provid
 
 ## Requirements
 
-* PHP 8.3+
+* PHP 8.5+
 
 See [Versions.md](docs/Versions.md) for the supported CakePHP versions.
 
