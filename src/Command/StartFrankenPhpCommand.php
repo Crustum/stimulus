@@ -301,9 +301,7 @@ class StartFrankenPhpCommand extends StimulusCommand
     {
         $mercure = $this->stimulusConfig('mercure');
 
-        if ($mercure === null) {
-            $mercure = $this->mercureConfigFromBroadcasting();
-        }
+        $mercure ??= $this->mercureConfigFromBroadcasting();
 
         if (! $mercure) {
             return '';

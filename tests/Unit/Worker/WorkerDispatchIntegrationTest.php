@@ -126,7 +126,7 @@ class WorkerDispatchIntegrationTest extends TestCase
         }
 
         foreach ($urls as $url) {
-            $urlResults = array_filter($results, fn($k): bool => str_starts_with((string)$k, $url . ':'), ARRAY_FILTER_USE_KEY);
+            $urlResults = array_filter($results, fn($k): bool => str_starts_with($k, $url . ':'), ARRAY_FILTER_USE_KEY);
             $statuses = array_map(intval(...), array_column($urlResults, 'status'));
 
             $this->assertCount(3, $statuses, "Three requests to {$url} should all succeed");

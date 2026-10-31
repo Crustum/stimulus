@@ -193,18 +193,14 @@ class RoadRunnerClient implements Client, StoppableClient
             $normalized = strtoupper(str_replace('-', '_', $name));
 
             if ($normalized === 'CONTENT_TYPE' || $normalized === 'CONTENT_LENGTH') {
-                if (!isset($environment[$normalized])) {
-                    $environment[$normalized] = implode(', ', $values);
-                }
+                $environment[$normalized] ??= implode(', ', $values);
 
                 return;
             }
 
             $key = 'HTTP_' . $normalized;
 
-            if (!isset($environment[$key])) {
-                $environment[$key] = implode(', ', $values);
-            }
+            $environment[$key] ??= implode(', ', $values);
         });
 
         $parsedBody = $request->getParsedBody();
