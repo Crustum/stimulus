@@ -206,6 +206,7 @@ class StartFrankenPhpCommand extends StimulusCommand
                     ? "num {$this->workerCount()}"
                     : '',
                 'CADDY_SERVER_EXTRA_DIRECTIVES' => $this->buildMercureConfig(),
+                ...$this->mercureEnvironmentVariables(),
                 'CADDY_SERVER_WATCH_DIRECTIVES' => $this->buildWatchConfig(),
                 ...(array)$this->stimulusConfig('caddy.env', []),
             ],
@@ -289,36 +290,254 @@ class StartFrankenPhpCommand extends StimulusCommand
     /**
      * Generates the Mercure configuration snippet for the Caddyfile.
      *
-     * The snippet lines assemble imperatively from the configured Mercure
-     * settings.
+     * Falls back to the directives derived from the default broadcasting
+     * connection when no explicit Mercure configuration exists, so the hub
+     * serves the application origin without manual Caddyfile blocks. An
+     * explicit `false` value keeps the hub disabled.
      *
      * @return string Mercure Caddyfile snippet, or empty when unconfigured.
      */
     protected function buildMercureConfig(): string
     {
-        $mercure = $this->stimulusConfig('mercure', false);
+        $mercure = $this->stimulusConfig('mercure');
+
+        if ($mercure === null) {
+            $mercure = $this->mercureConfigFromBroadcasting();
+        }
 
         if (! $mercure) {
             return '';
         }
 
-        $config = 'mercure {';
+        return 'mercure ' . $this->buildCaddyfileBlock((array)$mercure, 2);
+    }
 
-        foreach ((array)$mercure as $key => $value) {
+    /**
+     * Generates a Caddyfile block from the given directives.
+     *
+     * Nested arrays render as sub-blocks, `true` renders a bare directive,
+     * and `false` skips the directive. The loop stays imperative because the
+     * reference implementation builds the snippet imperatively.
+     *
+     * @param array<string, mixed> $directives Directives mapped to their values.
+     * @param int $depth Nesting depth driving the indentation.
+     * @return string Rendered Caddyfile block.
+     */
+    protected function buildCaddyfileBlock(array $directives, int $depth): string
+    {
+        $indent = str_repeat("\t", $depth + 1);
+
+        $config = '{';
+
+        foreach ($directives as $key => $value) {
             if ($value === false) {
                 continue;
             }
 
-            if ($value === true) {
-                $config .= "\n\t\t\t{$key}";
-
-                continue;
-            }
-
-            $config .= "\n\t\t\t{$key} {$value}";
+            $config .= "\n{$indent}" . match (true) {
+                $value === true => (string)$key,
+                is_array($value) => $key . ' ' . $this->buildCaddyfileBlock($value, $depth + 1),
+                default => $key . ' ' . $value,
+            };
         }
 
-        return "{$config}\n\t\t}";
+        return $config . "\n" . str_repeat("\t", $depth) . '}';
+    }
+
+    /**
+     * Generates the Mercure hub directives matching the default broadcasting connection.
+     *
+     * Mirrors the claims the broadcaster signs its tokens with, so browsers
+     * subscribing on the application origin authenticate against the hub
+     * without manual configuration. Non-HMAC algorithms cannot be expressed
+     * as shared secrets and disable the derivation with a warning.
+     *
+     * @return array<string, mixed> Hub directives, or empty when derivation is unavailable.
+     */
+    protected function mercureConfigFromBroadcasting(): array
+    {
+        $connection = $this->frankenPhpMercureConnection();
+
+        if ($connection === null) {
+            return [];
+        }
+
+        $keys = $this->mercureKeys($connection);
+
+        foreach (array_filter($keys) as [, $algorithm]) {
+            if (! str_starts_with((string)$algorithm, 'HS')) {
+                $this->warn(
+                    "Unable to configure the FrankenPHP Mercure hub for the [{$algorithm}] algorithm. "
+                    . 'Please configure it using the [Stimulus.mercure] configuration option.',
+                );
+
+                return [];
+            }
+        }
+
+        $claims = $connection['claims'] ?? [];
+
+        $claims = is_array($claims) ? $claims : [];
+
+        $appUrl = Configure::read('App.fullBaseUrl');
+
+        $appUrl = is_string($appUrl) ? $appUrl : null;
+
+        $origin = $this->origin($appUrl);
+
+        $url = $connection['url'] ?? null
+            ?: ($connection['public_url'] ?? null ?: ($origin ? $origin . '/.well-known/mercure' : '/.well-known/mercure'));
+
+        $aud = $claims['aud'] ?? null;
+
+        $aud = is_array($aud) ? ($aud[0] ?? null) : $aud;
+
+        $audience = $aud ?: ($connection['public_url'] ?? null ?: $url);
+
+        $issuer = $claims['iss'] ?? null ?: ($appUrl ?: $url);
+
+        return [
+            'issuer ' . $issuer => [
+                'publisher' => $keys['publisher']
+                    ? ['jwt' => '{env.STIMULUS_MERCURE_PUBLISHER_JWT_KEY} ' . $keys['publisher'][1]]
+                    : false,
+                'subscriber' => ['jwt' => '{env.STIMULUS_MERCURE_SUBSCRIBER_JWT_KEY} ' . $keys['subscriber'][1]],
+            ],
+            'resource_identifier' => $this->origin(is_string($audience) ? $audience : null) ? $audience : false,
+            'subscriptions' => true,
+            'publish_origins' => $this->mercureClientEvents($connection) && $origin ? $origin : false,
+            'cookie_name' => $connection['cookie_name'] ?? null ?: false,
+        ];
+    }
+
+    /**
+     * Gets the keys verifying the tokens of the FrankenPHP Mercure hub.
+     *
+     * Explicit Mercure configuration takes precedence and carries its own
+     * secrets, so no environment variables are derived in that case.
+     *
+     * @return array<string, string> Environment variables carrying the hub secrets.
+     */
+    protected function mercureEnvironmentVariables(): array
+    {
+        if ($this->stimulusConfig('mercure') !== null) {
+            return [];
+        }
+
+        $connection = $this->frankenPhpMercureConnection();
+
+        if ($connection === null) {
+            return [];
+        }
+
+        $keys = $this->mercureKeys($connection);
+
+        return [
+            'STIMULUS_MERCURE_PUBLISHER_JWT_KEY' => $keys['publisher'][0] ?? '',
+            'STIMULUS_MERCURE_SUBSCRIBER_JWT_KEY' => $keys['subscriber'][0],
+        ];
+    }
+
+    /**
+     * Gets the secret and algorithm of the publisher and subscriber tokens of the given connection.
+     *
+     * Browsers publish client events with their subscriber token, so the
+     * publisher secret follows the subscriber secret unless updates are
+     * published over HTTP.
+     *
+     * @param array<string, mixed> $connection Broadcasting connection configuration.
+     * @return array{publisher: array{0: string, 1: string}|null, subscriber: array{0: string, 1: string}} Token secrets paired with their algorithms.
+     */
+    protected function mercureKeys(array $connection): array
+    {
+        $key = fn(string $side): array => [
+            (string)($connection[$side . '_secret'] ?? null ?: ($connection['secret'] ?? '')),
+            $connection[$side . '_algorithm'] ?? $connection['algorithm'] ?? 'HS256',
+        ];
+
+        return [
+            'publisher' => match (true) {
+                ! empty($connection['url']) => $key('publish'),
+                $this->mercureClientEvents($connection) => $key('subscribe'),
+                default => null,
+            },
+            'subscriber' => $key('subscribe'),
+        ];
+    }
+
+    /**
+     * Determines whether the given connection allows clients to whisper.
+     *
+     * @param array<string, mixed> $connection Broadcasting connection configuration.
+     * @return bool Whether client events stay enabled.
+     */
+    protected function mercureClientEvents(array $connection): bool
+    {
+        return (bool)($connection['client_events'] ?? true);
+    }
+
+    /**
+     * Gets the default broadcasting connection when browsers subscribe to the built-in Mercure hub.
+     *
+     * Connections name their broadcaster through `className`, so the marker
+     * alone recognises a Mercure connection. A hub served from another origin
+     * is a remote one and stays unmanaged.
+     *
+     * @return array<string, mixed>|null Broadcasting connection configuration, or null when unmanaged.
+     */
+    protected function frankenPhpMercureConnection(): ?array
+    {
+        $connection = Configure::read('Broadcasting.connections.' . Configure::read('Broadcasting.default'));
+
+        if (! is_array($connection)) {
+            return null;
+        }
+
+        if (! $this->isMercureBroadcaster($connection['className'] ?? null)) {
+            return null;
+        }
+
+        $origin = $this->origin($connection['public_url'] ?? null ?: ($connection['url'] ?? null));
+
+        $appUrl = Configure::read('App.fullBaseUrl');
+
+        if ($origin && $origin !== $this->origin(is_string($appUrl) ? $appUrl : null)) {
+            return null;
+        }
+
+        return $connection;
+    }
+
+    /**
+     * Determines whether the given broadcaster class name belongs to a Mercure broadcaster.
+     *
+     * Connection entries name their broadcaster through `className` as a full
+     * class or a plugin-style `Vendor/Plugin.Name` reference, so the name
+     * alone recognises the broadcaster without loading the sibling plugin.
+     *
+     * @param mixed $className Broadcaster class name from the connection configuration.
+     * @return bool Whether the class name belongs to a Mercure broadcaster.
+     */
+    protected function isMercureBroadcaster(mixed $className): bool
+    {
+        return is_string($className) && str_contains(strtolower($className), 'mercure');
+    }
+
+    /**
+     * Gets the origin of the given absolute URL.
+     *
+     * @param string|null $url Absolute URL to reduce to its origin.
+     * @return string|null Scheme, host, and port of the URL, or null when relative.
+     */
+    protected function origin(?string $url): ?string
+    {
+        $parts = parse_url((string)$url);
+
+        if (! is_array($parts) || ! isset($parts['scheme'], $parts['host'])) {
+            return null;
+        }
+
+        return $parts['scheme'] . '://' . $parts['host'] . (isset($parts['port']) ? ':' . $parts['port'] : '');
     }
 
     /**

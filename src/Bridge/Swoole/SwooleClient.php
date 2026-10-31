@@ -17,6 +17,7 @@ use Crustum\Stimulus\Http\MimeType;
 use Crustum\Stimulus\Http\RequestContext;
 use Crustum\Stimulus\Http\StimulusResponse;
 use Crustum\Stimulus\StimulusManager;
+use Crustum\Stimulus\Trait\StreamsGeneratorResponsesTrait;
 use Psr\Http\Message\ResponseInterface;
 use Throwable;
 
@@ -35,6 +36,8 @@ use Throwable;
  */
 class SwooleClient implements Client, ServesStaticFiles
 {
+    use StreamsGeneratorResponsesTrait;
+
     /**
      * HTTP reason phrases for status codes beyond the Swoole defaults.
      *
@@ -299,9 +302,10 @@ class SwooleClient implements Client, ServesStaticFiles
     /**
      * Sends the content from the worker response to the Swoole response.
      *
-     * Chunk producers stream through writes while buffered output prepends;
-     * large bodies chunk imperatively, offsetting through the content instead
-     * of collecting it.
+     * Chunk producers stream through writes, stopping early when a write
+     * fails so disconnected clients stop the generator, while buffered
+     * output prepends and large bodies chunk imperatively, offsetting
+     * through the content instead of collecting it.
      *
      * @param \Crustum\Stimulus\Http\StimulusResponse $stimulusResponse Worker response envelope.
      * @param mixed $swooleResponse Swoole HTTP response receiving the content.
@@ -322,10 +326,16 @@ class SwooleClient implements Client, ServesStaticFiles
         }
 
         if ($stimulusResponse->streamer instanceof Closure) {
-            $producer = $stimulusResponse->streamer;
+            $this->streamGeneratorResponse(
+                $stimulusResponse->streamer,
+                static function (string $chunk) use ($swooleResponse): mixed {
+                    if ($chunk === '') {
+                        return null;
+                    }
 
-            (new Collection($producer()))
-                ->each(fn(mixed $chunk): mixed => $swooleResponse->write((string)$chunk));
+                    return $swooleResponse->write($chunk);
+                },
+            );
 
             $swooleResponse->end();
 

@@ -18,6 +18,7 @@ use Laminas\Diactoros\Response\TextResponse;
 use Laminas\Diactoros\ServerRequestFactory;
 use Mockery;
 use Psr\Http\Message\ResponseInterface;
+use Spiral\RoadRunner\Http\Exception\StreamStoppedException;
 use Spiral\RoadRunner\Http\HttpWorker;
 use Spiral\RoadRunner\Http\PSR7Worker;
 use stdClass;
@@ -279,6 +280,82 @@ class RoadRunnerClientTest extends TestCase
 
         $producer = static function (): Generator {
             yield 'Hello World';
+        };
+
+        $client->respond(
+            new RequestContext(),
+            new StimulusResponse(
+                new TextResponse('Hello World', 200, ['cache-control' => 'no-cache']),
+                null,
+                $producer,
+            ),
+        );
+    }
+
+    /**
+     * Respond streams untyped generator producers through the HTTP worker.
+     *
+     * @return void
+     */
+    public function testRespondMethodSendsStreamedUntypedGeneratorResponseToRoadRunner(): void
+    {
+        $worker = Mockery::mock(PSR7Worker::class);
+        $client = new RoadRunnerClient($worker);
+
+        $httpWorker = Mockery::mock(HttpWorker::class);
+
+        $worker->shouldReceive('getHttpWorker')->once()->andReturn($httpWorker);
+        $httpWorker->shouldReceive('respond')->once()->with(
+            200,
+            Mockery::on(
+                static fn($body): bool => $body instanceof Generator
+                    && iterator_to_array($body) === ['Hello', 'World'],
+            ),
+            Mockery::hasKey('cache-control'),
+        );
+
+        $producer = static function () {
+            yield 'Hello';
+            yield 'World';
+        };
+
+        $client->respond(
+            new RequestContext(),
+            new StimulusResponse(
+                new TextResponse('Hello World', 200, ['cache-control' => 'no-cache']),
+                null,
+                $producer,
+            ),
+        );
+    }
+
+    /**
+     * Respond ends streamed responses quietly when RoadRunner stops them.
+     *
+     * @return void
+     */
+    public function testRespondMethodEndsStreamQuietlyWhenRoadRunnerStopsIt(): void
+    {
+        $worker = Mockery::mock(PSR7Worker::class);
+        $client = new RoadRunnerClient($worker);
+
+        $httpWorker = Mockery::mock(HttpWorker::class);
+
+        $worker->shouldReceive('getHttpWorker')->once()->andReturn($httpWorker);
+        $httpWorker->shouldReceive('respond')->once()->with(
+            200,
+            Mockery::on(static function ($body): bool {
+                $body->current();
+                $body->throw(new StreamStoppedException());
+
+                return ! $body->valid();
+            }),
+            Mockery::hasKey('cache-control'),
+        );
+
+        $producer = static function (): Generator {
+            yield 'Hello';
+            yield 'World';
         };
 
         $client->respond(

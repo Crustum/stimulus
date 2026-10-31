@@ -5,6 +5,9 @@ namespace Crustum\Stimulus\Test\Unit\Trait;
 
 use Crustum\Stimulus\Listener\CreateConfigurationSandbox;
 use Crustum\Stimulus\Listener\FlushLocaleState;
+use Crustum\Stimulus\Listener\FlushMonologState;
+use Crustum\Stimulus\Listener\FlushOnce;
+use Crustum\Stimulus\Listener\FlushStrCache;
 use Crustum\Stimulus\Listener\GiveNewRequestInstanceToApplication;
 use Crustum\Stimulus\Listener\PrepareExploratorForNextOperation;
 use Crustum\Stimulus\Test\Support\ConfigurationOptionsTraitHost;
@@ -51,14 +54,26 @@ class ProvidesDefaultConfigurationOptionsTraitTest extends TestCase
     {
         $listeners = ConfigurationOptionsTraitHost::prepareApplicationForNextOperation();
 
-        $this->assertCount(25, $listeners);
+        $this->assertCount(26, $listeners);
         $this->assertSame(
             CreateConfigurationSandbox::class,
             $listeners[0],
         );
         $this->assertSame(
+            FlushMonologState::class,
+            $listeners[21],
+        );
+        $this->assertSame(
+            FlushOnce::class,
+            $listeners[22],
+        );
+        $this->assertSame(
+            FlushStrCache::class,
+            $listeners[23],
+        );
+        $this->assertSame(
             PrepareExploratorForNextOperation::class,
-            $listeners[24],
+            $listeners[25],
         );
 
         foreach ($listeners as $listener) {

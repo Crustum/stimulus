@@ -12,11 +12,13 @@ use Crustum\Stimulus\Contracts\Client;
 use Crustum\Stimulus\Contracts\StoppableClient;
 use Crustum\Stimulus\Http\RequestContext;
 use Crustum\Stimulus\Http\StimulusResponse;
+use Generator;
 use InvalidArgumentException;
 use Laminas\Diactoros\Stream;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 use Psr\Http\Message\UriInterface;
+use Spiral\RoadRunner\Http\Exception\StreamStoppedException;
 use Spiral\RoadRunner\Http\PSR7Worker;
 use Throwable;
 
@@ -63,9 +65,10 @@ class RoadRunnerClient implements Client, StoppableClient
     /**
      * Sends the response to the server.
      *
-     * Envelopes carrying a chunk producer stream through the HTTP worker;
-     * every other response is sent buffered. Buffered output is prepended to non-streamed responses only.
-     * Pending response cookies join every response as `Set-Cookie`
+     * Envelopes carrying a chunk producer stream through the HTTP worker,
+     * ending quietly when the worker reports a stopped stream; every other
+     * response is sent buffered. Buffered output is prepended to non-streamed
+     * responses only. Pending response cookies join every response as `Set-Cookie`
      * headers first, since the cookie collection never reaches the server on its own.
      *
      * @param \Crustum\Stimulus\Http\RequestContext $context Raw request context from the server.
@@ -81,7 +84,7 @@ class RoadRunnerClient implements Client, StoppableClient
 
             $this->client->getHttpWorker()->respond(
                 $response->getStatusCode(),
-                $producer(),
+                static::endStreamWhenStopped($producer()),
                 $response->getHeaders(),
             );
 
@@ -93,6 +96,27 @@ class RoadRunnerClient implements Client, StoppableClient
         }
 
         $this->client->respond($response);
+    }
+
+    /**
+     * Ends the given stream quietly once RoadRunner reports that the client has stopped it.
+     *
+     * @param \Generator|string $body Stream body handed to the HTTP worker.
+     * @return \Generator|string Stream body ending quietly on client disconnect.
+     */
+    protected static function endStreamWhenStopped(Generator|string $body): Generator|string
+    {
+        if (is_string($body)) {
+            return $body;
+        }
+
+        return (function () use ($body) {
+            try {
+                yield from $body;
+            } catch (StreamStoppedException) {
+                return;
+            }
+        })();
     }
 
     /**

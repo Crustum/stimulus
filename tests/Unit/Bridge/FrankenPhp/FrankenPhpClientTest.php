@@ -11,6 +11,7 @@ use Crustum\Stimulus\Http\RequestContext;
 use Crustum\Stimulus\Http\StimulusResponse;
 use Crustum\Stimulus\Test\TestCase;
 use Exception;
+use Generator;
 use Laminas\Diactoros\Response\TextResponse;
 use Mockery;
 use Psr\Http\Message\ResponseInterface;
@@ -79,6 +80,45 @@ class FrankenPhpClientTest extends TestCase
         $emitter->shouldReceive('emit')->once()->with($response)->andReturn(true);
 
         (new FrankenPhpClient($emitter))->respond(new RequestContext(), new StimulusResponse($response));
+    }
+
+    /**
+     * Respond streams generator chunks instead of emitting buffered.
+     *
+     * @return void
+     */
+    public function testRespondStreamsGeneratorChunks(): void
+    {
+        $emitter = Mockery::mock(ResponseEmitter::class);
+        $emitter->shouldNotReceive('emit');
+
+        $chunks = [];
+
+        ob_start(static function (string $buffer) use (&$chunks): string {
+            if ($buffer !== '') {
+                $chunks[] = $buffer;
+            }
+
+            return '';
+        });
+
+        try {
+            (new FrankenPhpClient($emitter))->respond(
+                new RequestContext(),
+                new StimulusResponse(
+                    new TextResponse('Hello World', 200),
+                    null,
+                    static function (): Generator {
+                        yield 'Hello';
+                        yield 'World';
+                    },
+                ),
+            );
+        } finally {
+            ob_end_clean();
+        }
+
+        $this->assertSame(['Hello', 'World'], $chunks);
     }
 
     /**

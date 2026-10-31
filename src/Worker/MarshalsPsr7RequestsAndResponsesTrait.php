@@ -57,9 +57,11 @@ trait MarshalsPsr7RequestsAndResponsesTrait
     /**
      * Resolves a body-chunk producer from the given stream callback.
      *
-     * Only callbacks declaring a generator or string return produce chunks; anything else (including a
-     * detached/absent callback) stays buffered. Chunks must be strings or
-     * stringable; anything else fails loudly instead of corrupting the stream.
+     * Generator callbacks produce chunks whether or not they declare a
+     * return type; other callbacks need a declared generator or string
+     * return. Anything else (including a detached/absent callback) stays
+     * buffered. Chunks must be strings or stringable; anything else fails
+     * loudly instead of corrupting the stream.
      *
      * @param callable|null $callback Detached body callback, or null when the stream carried none.
      * @return (\Closure():\Generator)|null Chunk producer, or null for buffered responses.
@@ -72,17 +74,7 @@ trait MarshalsPsr7RequestsAndResponsesTrait
 
         $reflection = new ReflectionFunction($callback);
 
-        if (!$reflection->hasReturnType()) {
-            return null;
-        }
-
-        $returnType = $reflection->getReturnType();
-
-        if (!$returnType instanceof ReflectionNamedType) {
-            return null;
-        }
-
-        if (!in_array($returnType->getName(), [Generator::class, 'string'], true)) {
+        if (! $reflection->isGenerator() && ! $this->declaresStreamReturn($reflection)) {
             return null;
         }
 
@@ -99,5 +91,26 @@ trait MarshalsPsr7RequestsAndResponsesTrait
                 yield is_string($chunk) ? $chunk : (string)$chunk;
             }
         };
+    }
+
+    /**
+     * Determines whether the given callback declares a streamed return.
+     *
+     * Only named generator or string returns qualify; union, intersection,
+     * and absent types stay buffered.
+     *
+     * @param \ReflectionFunction $reflection Detached body callback reflection.
+     * @return bool Whether the callback declares a streamed return.
+     */
+    protected function declaresStreamReturn(ReflectionFunction $reflection): bool
+    {
+        if (! $reflection->hasReturnType()) {
+            return false;
+        }
+
+        $returnType = $reflection->getReturnType();
+
+        return $returnType instanceof ReflectionNamedType
+            && in_array($returnType->getName(), [Generator::class, 'string'], true);
     }
 }

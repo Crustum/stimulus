@@ -14,6 +14,7 @@ use Crustum\Stimulus\Listener\FlushDatabaseRecordModificationState;
 use Crustum\Stimulus\Listener\FlushLocaleState;
 use Crustum\Stimulus\Listener\FlushLogContext;
 use Crustum\Stimulus\Listener\FlushMonologState;
+use Crustum\Stimulus\Listener\FlushOnce;
 use Crustum\Stimulus\Listener\FlushQueuedCookies;
 use Crustum\Stimulus\Listener\FlushSessionState;
 use Crustum\Stimulus\Listener\FlushStrCache;
@@ -89,6 +90,7 @@ trait ProvidesDefaultConfigurationOptionsTrait
             FlushArrayCache::class,
             FlushLogContext::class,
             FlushMonologState::class,
+            FlushOnce::class,
             FlushStrCache::class,
             FlushTranslatorCache::class,
             PrepareExploratorForNextOperation::class,

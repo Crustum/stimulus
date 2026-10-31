@@ -7,9 +7,11 @@ use Cake\Core\Configure;
 use Cake\Http\ResponseEmitter;
 use Cake\Http\ServerRequest;
 use Cake\Http\ServerRequestFactory;
+use Closure;
 use Crustum\Stimulus\Contracts\Client;
 use Crustum\Stimulus\Http\RequestContext;
 use Crustum\Stimulus\Http\StimulusResponse;
+use Crustum\Stimulus\Trait\StreamsGeneratorResponsesTrait;
 use Laminas\Diactoros\Response\TextResponse;
 use Throwable;
 
@@ -17,10 +19,13 @@ use Throwable;
  * FrankenPHP server bridge client.
  *
  * Requests are captured from the worker globals through the request factory, and worker responses are
- * emitted through the response emitter instead of Symfony responses.
+ * emitted through the response emitter instead of Symfony responses. Callback-streamed bodies echo
+ * and flush through the shared streaming loop instead of the buffered emitter.
  */
 class FrankenPhpClient implements Client
 {
+    use StreamsGeneratorResponsesTrait;
+
     /**
      * Emitter sending worker responses back to the FrankenPHP server.
      *
@@ -55,12 +60,22 @@ class FrankenPhpClient implements Client
     /**
      * Sends the response to the server.
      *
+     * Envelopes carrying a chunk producer stream through the shared loop,
+     * echoing and flushing every chunk; every other response is emitted
+     * buffered.
+     *
      * @param \Crustum\Stimulus\Http\RequestContext $context Raw request context from the server.
      * @param \Crustum\Stimulus\Http\StimulusResponse $stimulusResponse Worker response envelope.
      * @return void
      */
     public function respond(RequestContext $context, StimulusResponse $stimulusResponse): void
     {
+        if ($stimulusResponse->streamer instanceof Closure) {
+            $this->streamGeneratorResponse($stimulusResponse->streamer, $this->writeStreamedChunk(...));
+
+            return;
+        }
+
         $this->emitter->emit($stimulusResponse->response);
     }
 

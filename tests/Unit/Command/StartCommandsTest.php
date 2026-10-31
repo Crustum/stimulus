@@ -4,9 +4,11 @@ declare(strict_types=1);
 namespace Crustum\Stimulus\Test\Unit\Command;
 
 use Cake\Console\Arguments;
+use Cake\Console\CommandInterface;
 use Cake\Console\ConsoleIo;
 use Cake\Console\TestSuite\StubConsoleOutput;
 use Cake\Core\Configure;
+use Crustum\Broadcasting\Broadcaster\MercureBroadcaster;
 use Crustum\Stimulus\Bridge\RoadRunner\ServerStateFile as RoadRunnerServerStateFile;
 use Crustum\Stimulus\Bridge\Swoole\ServerStateFile as SwooleServerStateFile;
 use Crustum\Stimulus\Bridge\Swoole\SwooleExtension;
@@ -43,6 +45,20 @@ class StartCommandsTest extends TestCase
     protected mixed $stimulusConfig = null;
 
     /**
+     * Previous broadcasting configuration restored after each test.
+     *
+     * @var mixed
+     */
+    protected mixed $broadcastingConfig = null;
+
+    /**
+     * Previous application URL restored after each test.
+     *
+     * @var mixed
+     */
+    protected mixed $appUrl = null;
+
+    /**
      * Temporary paths removed after each test.
      *
      * @var array<int, string>
@@ -59,6 +75,8 @@ class StartCommandsTest extends TestCase
         parent::setUp();
 
         $this->stimulusConfig = Configure::read('Stimulus');
+        $this->broadcastingConfig = Configure::read('Broadcasting');
+        $this->appUrl = Configure::read('App.fullBaseUrl');
     }
 
     /**
@@ -96,6 +114,18 @@ class StartCommandsTest extends TestCase
             Configure::delete('Stimulus');
         } else {
             Configure::write('Stimulus', $this->stimulusConfig);
+        }
+
+        if ($this->broadcastingConfig === null) {
+            Configure::delete('Broadcasting');
+        } else {
+            Configure::write('Broadcasting', $this->broadcastingConfig);
+        }
+
+        if ($this->appUrl === null) {
+            Configure::delete('App.fullBaseUrl');
+        } else {
+            Configure::write('App.fullBaseUrl', $this->appUrl);
         }
 
         parent::tearDown();
@@ -215,6 +245,333 @@ class StartCommandsTest extends TestCase
             "mercure {\n\t\t\tpublisher secret\n\t\t\tanonymous\n\t\t}",
             $command->buildMercureConfigPublic(),
         );
+    }
+
+    /**
+     * The Mercure snippet nests configured sub-blocks.
+     *
+     * @return void
+     */
+    public function testFrankenPhpMercureConfigNestsSubBlocks(): void
+    {
+        Configure::write('Stimulus.mercure', [
+            'issuer https://example.com' => [
+                'subscriber' => ['jwt' => '{env.MERCURE_SUBSCRIBER_JWT_KEY}'],
+            ],
+            'anonymous' => true,
+            'subscriptions' => false,
+        ]);
+
+        $command = $this->frankenPhpCommand();
+
+        $command->run([], $this->io());
+
+        $this->assertSame(
+            "mercure {\n"
+            . "\t\t\tissuer https://example.com {\n"
+            . "\t\t\t\tsubscriber {\n"
+            . "\t\t\t\t\tjwt {env.MERCURE_SUBSCRIBER_JWT_KEY}\n"
+            . "\t\t\t\t}\n"
+            . "\t\t\t}\n"
+            . "\t\t\tanonymous\n"
+            . "\t\t}",
+            $command->buildMercureConfigPublic(),
+        );
+        $this->assertSame([], $command->mercureEnvironmentVariablesPublic());
+    }
+
+    /**
+     * The Mercure hub stays disabled without configuration.
+     *
+     * @return void
+     */
+    public function testFrankenPhpMercureIsDisabledByDefault(): void
+    {
+        $command = $this->frankenPhpCommand();
+
+        $command->run([], $this->io());
+
+        $this->assertSame('', $command->buildMercureConfigPublic());
+        $this->assertSame([], $command->mercureEnvironmentVariablesPublic());
+    }
+
+    /**
+     * The Mercure hub derives from the mercure broadcasting connection.
+     *
+     * @return void
+     */
+    public function testFrankenPhpMercureHubIsConfiguredFromBroadcastingConnection(): void
+    {
+        Configure::write('App.fullBaseUrl', 'http://localhost:8000/app');
+        Configure::write('Broadcasting.default', 'mercure');
+        Configure::write('Broadcasting.connections.mercure', ['className' => 'Crustum/Broadcasting.Mercure', 'secret' => 'secret']);
+
+        $command = $this->frankenPhpCommand();
+
+        $command->run([], $this->io());
+
+        $this->assertSame(
+            "mercure {\n"
+            . "\t\t\tissuer http://localhost:8000/app {\n"
+            . "\t\t\t\tpublisher {\n"
+            . "\t\t\t\t\tjwt {env.STIMULUS_MERCURE_PUBLISHER_JWT_KEY} HS256\n"
+            . "\t\t\t\t}\n"
+            . "\t\t\t\tsubscriber {\n"
+            . "\t\t\t\t\tjwt {env.STIMULUS_MERCURE_SUBSCRIBER_JWT_KEY} HS256\n"
+            . "\t\t\t\t}\n"
+            . "\t\t\t}\n"
+            . "\t\t\tresource_identifier http://localhost:8000/.well-known/mercure\n"
+            . "\t\t\tsubscriptions\n"
+            . "\t\t\tpublish_origins http://localhost:8000\n"
+            . "\t\t}",
+            $command->buildMercureConfigPublic(),
+        );
+        $this->assertSame(
+            [
+                'STIMULUS_MERCURE_PUBLISHER_JWT_KEY' => 'secret',
+                'STIMULUS_MERCURE_SUBSCRIBER_JWT_KEY' => 'secret',
+            ],
+            $command->mercureEnvironmentVariablesPublic(),
+        );
+    }
+
+    /**
+     * The Mercure hub follows the connection claims and secrets.
+     *
+     * @return void
+     */
+    public function testFrankenPhpMercureHubFollowsConnectionClaimsAndSecrets(): void
+    {
+        Configure::write('App.fullBaseUrl', 'https://example.com');
+        Configure::write('Broadcasting.default', 'mercure');
+        Configure::write('Broadcasting.connections.mercure', [
+            'className' => 'Crustum/Broadcasting.Mercure',
+            'secret' => 'secret',
+            'subscribe_secret' => 'subscribe-secret',
+            'subscribe_algorithm' => 'HS512',
+            'public_url' => 'https://example.com/hub',
+            'claims' => ['iss' => 'https://issuer.example.com'],
+            'client_events' => false,
+            'cookie_name' => 'mercure_access_token',
+        ]);
+
+        $command = $this->frankenPhpCommand();
+
+        $command->run([], $this->io());
+
+        $this->assertSame(
+            "mercure {\n"
+            . "\t\t\tissuer https://issuer.example.com {\n"
+            . "\t\t\t\tsubscriber {\n"
+            . "\t\t\t\t\tjwt {env.STIMULUS_MERCURE_SUBSCRIBER_JWT_KEY} HS512\n"
+            . "\t\t\t\t}\n"
+            . "\t\t\t}\n"
+            . "\t\t\tresource_identifier https://example.com/hub\n"
+            . "\t\t\tsubscriptions\n"
+            . "\t\t\tcookie_name mercure_access_token\n"
+            . "\t\t}",
+            $command->buildMercureConfigPublic(),
+        );
+        $this->assertSame(
+            [
+                'STIMULUS_MERCURE_PUBLISHER_JWT_KEY' => '',
+                'STIMULUS_MERCURE_SUBSCRIBER_JWT_KEY' => 'subscribe-secret',
+            ],
+            $command->mercureEnvironmentVariablesPublic(),
+        );
+    }
+
+    /**
+     * The Mercure hub accepts updates published over HTTP.
+     *
+     * @return void
+     */
+    public function testFrankenPhpMercureHubAcceptsUpdatesPublishedOverHttp(): void
+    {
+        Configure::write('App.fullBaseUrl', 'http://localhost:8000');
+        Configure::write('Broadcasting.default', 'mercure');
+        Configure::write('Broadcasting.connections.mercure', [
+            'className' => 'Crustum/Broadcasting.Mercure',
+            'url' => 'http://localhost:8000/.well-known/mercure',
+            'secret' => 'secret',
+            'publish_secret' => 'publish-secret',
+            'publish_algorithm' => 'HS384',
+        ]);
+
+        $command = $this->frankenPhpCommand();
+
+        $command->run([], $this->io());
+
+        $this->assertSame(
+            "mercure {\n"
+            . "\t\t\tissuer http://localhost:8000 {\n"
+            . "\t\t\t\tpublisher {\n"
+            . "\t\t\t\t\tjwt {env.STIMULUS_MERCURE_PUBLISHER_JWT_KEY} HS384\n"
+            . "\t\t\t\t}\n"
+            . "\t\t\t\tsubscriber {\n"
+            . "\t\t\t\t\tjwt {env.STIMULUS_MERCURE_SUBSCRIBER_JWT_KEY} HS256\n"
+            . "\t\t\t\t}\n"
+            . "\t\t\t}\n"
+            . "\t\t\tresource_identifier http://localhost:8000/.well-known/mercure\n"
+            . "\t\t\tsubscriptions\n"
+            . "\t\t\tpublish_origins http://localhost:8000\n"
+            . "\t\t}",
+            $command->buildMercureConfigPublic(),
+        );
+        $this->assertSame(
+            [
+                'STIMULUS_MERCURE_PUBLISHER_JWT_KEY' => 'publish-secret',
+                'STIMULUS_MERCURE_SUBSCRIBER_JWT_KEY' => 'secret',
+            ],
+            $command->mercureEnvironmentVariablesPublic(),
+        );
+    }
+
+    /**
+     * Mercure hubs on another origin stay unmanaged.
+     *
+     * @return void
+     */
+    public function testFrankenPhpMercureHubsOnAnotherOriginAreIgnored(): void
+    {
+        Configure::write('App.fullBaseUrl', 'http://localhost:8000');
+        Configure::write('Broadcasting.default', 'mercure');
+        Configure::write('Broadcasting.connections.mercure', [
+            'className' => 'Crustum/Broadcasting.Mercure',
+            'url' => 'https://hub.example.com/.well-known/mercure',
+            'secret' => 'secret',
+        ]);
+
+        $command = $this->frankenPhpCommand();
+
+        $command->run([], $this->io());
+
+        $this->assertSame('', $command->buildMercureConfigPublic());
+        $this->assertSame([], $command->mercureEnvironmentVariablesPublic());
+    }
+
+    /**
+     * The Mercure hub is detected by fully qualified class name.
+     *
+     * Connections may name their broadcaster through a full class instead of
+     * the plugin-style reference, so that spelling enables the derivation too.
+     *
+     * @return void
+     */
+    public function testFrankenPhpMercureHubIsDetectedByFullyQualifiedClassName(): void
+    {
+        Configure::write('App.fullBaseUrl', 'http://localhost:8000/app');
+        Configure::write('Broadcasting.default', 'mercure');
+        Configure::write('Broadcasting.connections.mercure', [
+            'className' => MercureBroadcaster::class,
+            'secret' => 'secret',
+        ]);
+
+        $command = $this->frankenPhpCommand();
+
+        $command->run([], $this->io());
+
+        $this->assertSame(
+            "mercure {\n"
+            . "\t\t\tissuer http://localhost:8000/app {\n"
+            . "\t\t\t\tpublisher {\n"
+            . "\t\t\t\t\tjwt {env.STIMULUS_MERCURE_PUBLISHER_JWT_KEY} HS256\n"
+            . "\t\t\t\t}\n"
+            . "\t\t\t\tsubscriber {\n"
+            . "\t\t\t\t\tjwt {env.STIMULUS_MERCURE_SUBSCRIBER_JWT_KEY} HS256\n"
+            . "\t\t\t\t}\n"
+            . "\t\t\t}\n"
+            . "\t\t\tresource_identifier http://localhost:8000/.well-known/mercure\n"
+            . "\t\t\tsubscriptions\n"
+            . "\t\t\tpublish_origins http://localhost:8000\n"
+            . "\t\t}",
+            $command->buildMercureConfigPublic(),
+        );
+        $this->assertSame(
+            [
+                'STIMULUS_MERCURE_PUBLISHER_JWT_KEY' => 'secret',
+                'STIMULUS_MERCURE_SUBSCRIBER_JWT_KEY' => 'secret',
+            ],
+            $command->mercureEnvironmentVariablesPublic(),
+        );
+    }
+
+    /**
+     * Non-Mercure broadcasters leave the hub disabled.
+     *
+     * @return void
+     */
+    public function testFrankenPhpMercureHubIgnoresNonMercureBroadcasters(): void
+    {
+        Configure::write('App.fullBaseUrl', 'http://localhost:8000');
+        Configure::write('Broadcasting.default', 'pusher');
+        Configure::write('Broadcasting.connections.pusher', [
+            'className' => 'Crustum/Broadcasting.Pusher',
+            'secret' => 'secret',
+        ]);
+
+        $command = $this->frankenPhpCommand();
+
+        $command->run([], $this->io());
+
+        $this->assertSame('', $command->buildMercureConfigPublic());
+        $this->assertSame([], $command->mercureEnvironmentVariablesPublic());
+    }
+
+    /**
+     * Explicit Mercure configuration takes precedence over broadcasting.
+     *
+     * @return void
+     */
+    public function testFrankenPhpMercureConfigurationTakesPrecedence(): void
+    {
+        Configure::write('Broadcasting.default', 'mercure');
+        Configure::write('Broadcasting.connections.mercure', ['className' => 'Crustum/Broadcasting.Mercure', 'secret' => 'secret']);
+        Configure::write('Stimulus.mercure', [
+            'issuer https://example.com' => [
+                'subscriber' => ['jwt' => '{env.MERCURE_SUBSCRIBER_JWT_KEY}'],
+            ],
+            'anonymous' => true,
+            'subscriptions' => false,
+            'cors_origins' => 'https://a.example.com https://b.example.com',
+        ]);
+
+        $command = $this->frankenPhpCommand();
+
+        $command->run([], $this->io());
+
+        $this->assertSame(
+            "mercure {\n"
+            . "\t\t\tissuer https://example.com {\n"
+            . "\t\t\t\tsubscriber {\n"
+            . "\t\t\t\t\tjwt {env.MERCURE_SUBSCRIBER_JWT_KEY}\n"
+            . "\t\t\t\t}\n"
+            . "\t\t\t}\n"
+            . "\t\t\tanonymous\n"
+            . "\t\t\tcors_origins https://a.example.com https://b.example.com\n"
+            . "\t\t}",
+            $command->buildMercureConfigPublic(),
+        );
+        $this->assertSame([], $command->mercureEnvironmentVariablesPublic());
+    }
+
+    /**
+     * Explicit Mercure configuration can disable the hub.
+     *
+     * @return void
+     */
+    public function testFrankenPhpMercureConfigurationCanDisableTheHub(): void
+    {
+        Configure::write('Broadcasting.default', 'mercure');
+        Configure::write('Broadcasting.connections.mercure', ['className' => 'Crustum/Broadcasting.Mercure', 'secret' => 'secret']);
+        Configure::write('Stimulus.mercure', false);
+
+        $command = $this->frankenPhpCommand();
+
+        $command->run([], $this->io());
+
+        $this->assertSame('', $command->buildMercureConfigPublic());
+        $this->assertSame([], $command->mercureEnvironmentVariablesPublic());
     }
 
     /**
@@ -776,6 +1133,73 @@ class StartCommandsTest extends TestCase
     }
 
     /**
+     * Stopping before arguments are bound falls back to the configured server.
+     *
+     * A termination signal may invoke the stop path before run() binds the
+     * arguments, so the server resolves from configuration instead of
+     * throwing on the uninitialized arguments property.
+     *
+     * @return void
+     */
+    public function testStopServerBeforeArgsAreBoundFallsBackToConfiguredServer(): void
+    {
+        Configure::write('Stimulus.server', 'frankenphp');
+
+        $command = new class extends StartCommand {
+            /**
+             * Stop command arguments received while silent.
+             *
+             * @var array<int, string>|null
+             */
+            public ?array $stoppedArgs = null;
+
+            /**
+             * Executes the command without dispatching the server.
+             *
+             * @param \Cake\Console\Arguments $args The command arguments.
+             * @param \Cake\Console\ConsoleIo $io The console io.
+             * @return int The exit code.
+             */
+            public function execute(Arguments $args, ConsoleIo $io): int
+            {
+                return self::CODE_SUCCESS;
+            }
+
+            /**
+             * Exposes the server stop without bound arguments.
+             *
+             * @return void
+             */
+            public function stopServerPublic(): void
+            {
+                $this->stopServer();
+            }
+
+            /**
+             * Records the silenced stop command instead of running it.
+             *
+             * @param \Cake\Console\CommandInterface|string $command Command to execute.
+             * @param array<int|string, mixed> $args Arguments forwarded to the command.
+             * @param \Cake\Console\ConsoleIo|null $io Console io.
+             * @return int Exit code of the executed command.
+             */
+            public function executeCommand(
+                CommandInterface|string $command,
+                array $args = [],
+                ?ConsoleIo $io = null,
+            ): int {
+                $this->stoppedArgs = array_values($args);
+
+                return self::CODE_SUCCESS;
+            }
+        };
+
+        $command->stopServerPublic();
+
+        $this->assertSame(['--server', 'frankenphp'], $command->stoppedArgs);
+    }
+
+    /**
      * Builds stub console io for argument initialization.
      *
      * @return \Cake\Console\ConsoleIo Console io with stub streams.
@@ -843,6 +1267,16 @@ class StartCommandsTest extends TestCase
             public function buildMercureConfigPublic(): string
             {
                 return $this->buildMercureConfig();
+            }
+
+            /**
+             * Exposes the Mercure hub environment variables.
+             *
+             * @return array<string, string> Environment variables carrying the hub secrets.
+             */
+            public function mercureEnvironmentVariablesPublic(): array
+            {
+                return $this->mercureEnvironmentVariables();
             }
 
             /**

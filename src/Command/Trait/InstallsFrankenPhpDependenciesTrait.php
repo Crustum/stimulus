@@ -29,7 +29,7 @@ trait InstallsFrankenPhpDependenciesTrait
      *
      * @var string
      */
-    protected string $requiredFrankenPhpVersion = '1.5.0';
+    protected string $requiredFrankenPhpVersion = '1.13.2';
 
     /**
      * Ensures the FrankenPHP worker script is installed.
@@ -99,15 +99,15 @@ trait InstallsFrankenPhpDependenciesTrait
                 $gnu = $process->isSuccessful() ? '-gnu' : '';
 
                 return match ($arch) {
-                    'x86_64' => "frankenphp-linux-x86_64{$gnu}",
-                    'aarch64' => "frankenphp-linux-aarch64{$gnu}",
+                    'x86_64' => 'frankenphp-linux-x86_64' . $gnu,
+                    'aarch64' => 'frankenphp-linux-aarch64' . $gnu,
                     default => throw new RuntimeException(
                         'FrankenPHP binaries are only available for x86_64 and aarch64 architectures. ' .
                         'For other architectures, compile FrankenPHP manually.',
                     ),
                 };
             })(),
-            'Darwin' => "frankenphp-mac-{$arch}",
+            'Darwin' => 'frankenphp-mac-' . $arch,
             default => throw new RuntimeException(
                 'FrankenPHP binaries are only available for Linux and macOS. ' .
                 'On Windows, use WSL or Docker. On other systems use the Docker images or compile FrankenPHP manually.',
@@ -169,20 +169,17 @@ trait InstallsFrankenPhpDependenciesTrait
      *
      * Reads the binary build info and compares the FrankenPHP version against
      * the required one through a collection pipeline over the version lines,
-     * offering a re-download when outdated.
+     * offering a re-download when outdated. Binaries outside the project root
+     * are never replaced automatically and only receive a manual update note.
      *
      * @param string $frankenPhpBinary Absolute path to the FrankenPHP binary.
      * @return void
      */
     protected function ensureFrankenPhpBinaryMeetsRequirements(string $frankenPhpBinary): void
     {
-        $process = new Process([$frankenPhpBinary, 'build-info'], $this->applicationBasePath());
+        $buildInfo = $this->frankenPhpBinaryBuildInfo($frankenPhpBinary);
 
-        $process->run();
-
-        $buildInfo = $process->getOutput();
-
-        $lineWithVersion = (new Collection(explode("\n", $buildInfo)))
+        $lineWithVersion = (new Collection(explode("\n", (string)$buildInfo)))
             ->filter(
                 fn($line): bool => str_starts_with((string)$line, 'dep')
                     && str_contains((string)$line, 'github.com/dunglas/frankenphp'),
@@ -211,7 +208,13 @@ trait InstallsFrankenPhpDependenciesTrait
             return;
         }
 
-        $this->warn("Your FrankenPHP binary version (<error>{$version}</error>) may be incompatible with Stimulus.");
+        $this->warn(sprintf('Your FrankenPHP binary version (<error>%s</error>) may be incompatible with Stimulus.', $version));
+
+        if (! $this->isProjectFrankenPhpBinary($frankenPhpBinary)) {
+            $this->warn(sprintf('Please update the FrankenPHP binary located at [%s] manually.', $frankenPhpBinary));
+
+            return;
+        }
 
         if (
             $this->confirmAction(
@@ -219,21 +222,57 @@ trait InstallsFrankenPhpDependenciesTrait
                 true,
             )
         ) {
-            rename($frankenPhpBinary, "{$frankenPhpBinary}.backup");
+            rename($frankenPhpBinary, $frankenPhpBinary . '.backup');
 
             try {
                 $this->downloadFrankenPhpBinary();
             } catch (Throwable $e) {
                 Log::error($e->getMessage());
 
-                rename("{$frankenPhpBinary}.backup", $frankenPhpBinary);
+                rename($frankenPhpBinary . '.backup', $frankenPhpBinary);
 
                 $this->warn('Unable to download FrankenPHP binary. The underlying error has been logged.');
 
                 return;
             }
 
-            unlink("{$frankenPhpBinary}.backup");
+            unlink($frankenPhpBinary . '.backup');
         }
+    }
+
+    /**
+     * Determines whether the given binary is the project root FrankenPHP binary.
+     *
+     * Only the project root binary is replaced automatically. Binaries
+     * located elsewhere keep running untouched so a shared system binary is
+     * never swapped behind its other users.
+     *
+     * @param string $frankenPhpBinary Absolute path to the FrankenPHP binary.
+     * @return bool Whether the binary resolves to the project root one.
+     */
+    protected function isProjectFrankenPhpBinary(string $frankenPhpBinary): bool
+    {
+        $projectBinary = $this->applicationBasePath() . DIRECTORY_SEPARATOR . 'frankenphp';
+
+        $binaryPath = realpath($frankenPhpBinary);
+
+        $rootPath = realpath($projectBinary);
+
+        return is_string($binaryPath) && is_string($rootPath) && $binaryPath === $rootPath;
+    }
+
+    /**
+     * Reads the build info reported by the given FrankenPHP binary.
+     *
+     * @param string $frankenPhpBinary Absolute path to the FrankenPHP binary.
+     * @return string Build info output carrying the FrankenPHP version.
+     */
+    protected function frankenPhpBinaryBuildInfo(string $frankenPhpBinary): string
+    {
+        $process = new Process([$frankenPhpBinary, 'build-info'], $this->applicationBasePath());
+
+        $process->run();
+
+        return $process->getOutput();
     }
 }

@@ -40,6 +40,15 @@ class FakeSwooleResponse
     public array $writes = [];
 
     /**
+     * Value returned by body chunk writes.
+     *
+     * Flips to `false` to simulate a disconnected client stopping the stream.
+     *
+     * @var mixed
+     */
+    public mixed $writeResult = true;
+
+    /**
      * Recorded end calls.
      *
      * @var list<array<int, mixed>>
@@ -93,11 +102,13 @@ class FakeSwooleResponse
      * Records a body chunk write.
      *
      * @param string $data Body chunk.
-     * @return void
+     * @return mixed Configured write result, `false` simulates a disconnect.
      */
-    public function write(string $data): void
+    public function write(string $data): mixed
     {
         $this->writes[] = $data;
+
+        return $this->writeResult;
     }
 
     /**

@@ -34,6 +34,16 @@ trait InstallsRoadRunnerDependenciesTrait
     protected string $requiredRoadRunnerVersion = '2023.3.0';
 
     /**
+     * The first RoadRunner binary version using semantic versioning.
+     *
+     * RoadRunner moved from calendar versioning to semantic versioning with
+     * `3.0.0`, so older-looking versions compare against this floor instead.
+     *
+     * @var string
+     */
+    protected string $firstSemanticRoadRunnerVersion = '3.0.0';
+
+    /**
      * Determines if RoadRunner is installed.
      *
      * The Spiral worker class lives in the host dependencies, so the check
@@ -179,25 +189,19 @@ trait InstallsRoadRunnerDependenciesTrait
      */
     protected function ensureRoadRunnerBinaryMeetsRequirements(string $roadRunnerBinary): void
     {
-        $process = new Process([$roadRunnerBinary, '--version'], $this->applicationBasePath());
+        $version = $this->roadRunnerBinaryVersion($roadRunnerBinary);
 
-        $process->run();
-
-        $version = $process->getOutput();
-
-        if (! str_starts_with($version, 'rr version') && ! str_starts_with($version, 'rr.exe version')) {
+        if ($version === null) {
             $this->warn('Unable to determine the current RoadRunner binary version.');
 
             return;
         }
 
-        $version = explode(' ', $version)[2];
-
-        if (version_compare($version, $this->requiredRoadRunnerVersion, '>=')) {
+        if ($this->roadRunnerBinaryVersionIsSupported($version)) {
             return;
         }
 
-        $this->warn("Your RoadRunner binary version (<error>{$version}</error>) may be incompatible with Stimulus.");
+        $this->warn(sprintf('Your RoadRunner binary version (<error>%s</error>) may be incompatible with Stimulus.', $version));
 
         if (
             $this->confirmAction(
@@ -205,22 +209,62 @@ trait InstallsRoadRunnerDependenciesTrait
                 true,
             )
         ) {
-            rename($roadRunnerBinary, "{$roadRunnerBinary}.backup");
+            rename($roadRunnerBinary, $roadRunnerBinary . '.backup');
 
             try {
                 $this->downloadRoadRunnerBinary();
             } catch (Throwable $e) {
                 Log::error($e->getMessage());
 
-                rename("{$roadRunnerBinary}.backup", $roadRunnerBinary);
+                rename($roadRunnerBinary . '.backup', $roadRunnerBinary);
 
                 $this->warn('Unable to download RoadRunner binary. The HTTP request exception has been logged.');
 
                 return;
             }
 
-            unlink("{$roadRunnerBinary}.backup");
+            unlink($roadRunnerBinary . '.backup');
         }
+    }
+
+    /**
+     * Reads the version reported by the given RoadRunner binary.
+     *
+     * @param string $roadRunnerBinary Absolute path to the RoadRunner binary.
+     * @return string|null Binary version from the banner, or null when unreadable.
+     */
+    protected function roadRunnerBinaryVersion(string $roadRunnerBinary): ?string
+    {
+        $process = new Process([$roadRunnerBinary, '--version'], $this->applicationBasePath());
+
+        $process->run();
+
+        $banner = $process->getOutput();
+
+        if (! str_starts_with($banner, 'rr version') && ! str_starts_with($banner, 'rr.exe version')) {
+            return null;
+        }
+
+        return explode(' ', $banner)[2] ?? null;
+    }
+
+    /**
+     * Determines whether the given RoadRunner binary version is supported.
+     *
+     * RoadRunner used calendar versioning from `2023.1.0` through `2025.x`
+     * and moved to semantic versioning with `3.0.0`, so short versions
+     * compare against the semantic floor instead of the calendar one.
+     *
+     * @param string $version Binary version from the version banner.
+     * @return bool Whether the binary version is supported.
+     */
+    protected function roadRunnerBinaryVersionIsSupported(string $version): bool
+    {
+        if ((int)$version < 2000) {
+            return version_compare($version, $this->firstSemanticRoadRunnerVersion, '>=');
+        }
+
+        return version_compare($version, $this->requiredRoadRunnerVersion, '>=');
     }
 
     /**

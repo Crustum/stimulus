@@ -339,6 +339,63 @@ class SwooleClientTest extends TestCase
     }
 
     /**
+     * Empty streamed chunks never reach the Swoole response.
+     *
+     * @return void
+     */
+    public function testRespondMethodSkipsEmptyStreamedChunks(): void
+    {
+        $client = new SwooleClient();
+
+        $swooleResponse = new FakeSwooleResponse();
+
+        $response = (new Response())->withStatus(200)->withHeader('Content-Type', 'text/html');
+
+        $client->respond(
+            new RequestContext(['swooleResponse' => $swooleResponse]),
+            new StimulusResponse($response, null, static function (): iterable {
+                yield '';
+                yield 'Hello';
+            }),
+        );
+
+        $this->assertSame(['Hello'], $swooleResponse->writes);
+        $this->assertCount(1, $swooleResponse->ends);
+    }
+
+    /**
+     * Failed writes stop the streamed generator without resuming it.
+     *
+     * @return void
+     */
+    public function testRespondMethodStopsStreamedResponseWhenClientDisconnects(): void
+    {
+        $client = new SwooleClient();
+
+        $swooleResponse = new FakeSwooleResponse();
+        $swooleResponse->writeResult = false;
+
+        $response = (new Response())->withStatus(200)->withHeader('Content-Type', 'text/html');
+
+        $resumed = false;
+
+        $client->respond(
+            new RequestContext(['swooleResponse' => $swooleResponse]),
+            new StimulusResponse($response, null, static function () use (&$resumed): iterable {
+                yield 'Hello';
+
+                $resumed = true;
+
+                yield 'World';
+            }),
+        );
+
+        $this->assertSame(['Hello'], $swooleResponse->writes);
+        $this->assertFalse($resumed);
+        $this->assertCount(1, $swooleResponse->ends);
+    }
+
+    /**
      * Non-standard status codes carry their reason phrase.
      *
      * @return void

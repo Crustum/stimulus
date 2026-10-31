@@ -252,11 +252,16 @@ class StartCommand extends StimulusCommand
     /**
      * Stops the server.
      *
+     * A termination signal may arrive before run() binds the arguments,
+     * leaving the typed `$args` property uninitialized, so the option read
+     * is guarded and falls back to the configured server.
+     *
      * @return void
      */
     protected function stopServer(): void
     {
-        $server = $this->serverOption('server') ?: $this->stimulusConfig('server', 'roadrunner');
+        $server = (isset($this->args) ? $this->serverOption('server') : null)
+            ?: $this->stimulusConfig('server', 'roadrunner');
 
         $this->executeSilently(new StopCommand(), ['--server', (string)$server]);
     }

@@ -14,8 +14,6 @@ use Cake\Event\EventManagerInterface;
 use Cake\Http\BaseApplication;
 use Cake\Http\MiddlewareQueue;
 use Cake\Routing\RouteBuilder;
-use Crustum\PluginManifest\Manifest\ManifestInterface;
-use Crustum\PluginManifest\Manifest\ManifestTrait;
 use Crustum\Stimulus\Bridge\FrankenPhp\ServerStateFile as FrankenPhpServerStateFile;
 use Crustum\Stimulus\Bridge\RoadRunner\ServerStateFile as RoadRunnerServerStateFile;
 use Crustum\Stimulus\Bridge\Swoole\ServerStateFile as SwooleServerStateFile;
@@ -37,13 +35,9 @@ use RuntimeException;
 
 /**
  * Plugin for Crustum/Stimulus
- *
- * @uses \Crustum\PluginManifest\Manifest\ManifestTrait
  */
-class StimulusPlugin extends BasePlugin implements ManifestInterface
+class StimulusPlugin extends BasePlugin
 {
-    use ManifestTrait;
-
     /**
      * Event managers already wired with the worker listeners.
      *
@@ -230,28 +224,5 @@ class StimulusPlugin extends BasePlugin implements ManifestInterface
                     }
                 });
         });
-    }
-
-    /**
-     * Plugin install assets via crustum/plugin-manifest.
-     *
-     * @return array<int, array<string, mixed>>
-     */
-    public static function manifest(): array
-    {
-        $pluginPath = dirname(__DIR__);
-
-        return array_merge(
-            static::manifestConfig(
-                $pluginPath . DIRECTORY_SEPARATOR . 'config' . DIRECTORY_SEPARATOR . 'stimulus.php',
-                CONFIG . 'stimulus.php',
-                false,
-            ),
-            static::manifestBootstrapAppend(
-                "if (file_exists(CONFIG . 'stimulus.php')) {\n    Configure::load('stimulus', 'default');\n}",
-                '// Stimulus Plugin Configuration',
-            ),
-            static::manifestStarRepo('Crustum/Stimulus'),
-        );
     }
 }

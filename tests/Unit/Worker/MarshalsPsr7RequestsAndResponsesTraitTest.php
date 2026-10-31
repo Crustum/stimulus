@@ -15,8 +15,8 @@ use Generator;
  *
  * Proves callback-streamed bodies (the `CallbackStream` behind
  * `AbstractStreamResponse` server streaming) resolve into envelope chunk
- * producers exactly when their callback declares a generator or string
- * return, while every other response stays buffered with a working body.
+ * producers when their callback is a generator or declares a generator or
+ * string return, while every other response stays buffered with a working body.
  */
 class MarshalsPsr7RequestsAndResponsesTraitTest extends TestCase
 {
@@ -72,6 +72,27 @@ class MarshalsPsr7RequestsAndResponsesTraitTest extends TestCase
         $producer = $envelope->streamer;
 
         $this->assertSame(['Hello'], iterator_to_array($producer()));
+    }
+
+    /**
+     * Untyped generator callbacks resolve into chunk producers.
+     *
+     * @return void
+     */
+    public function testUntypedGeneratorCallbackResolvesProducer(): void
+    {
+        $response = (new Response())->withBody(new CallbackStream(static function () {
+            yield 'Hello';
+            yield ' World';
+        }));
+
+        $envelope = $this->host()->toEnvelope($response);
+
+        $this->assertNotNull($envelope->streamer);
+
+        $producer = $envelope->streamer;
+
+        $this->assertSame(['Hello', ' World'], iterator_to_array($producer()));
     }
 
     /**
